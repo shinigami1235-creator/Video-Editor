@@ -1,12 +1,12 @@
 # Builds the Windows installer and the two Mac apps (Apple Silicon and Intel).
-# Run it from the Actions tab with "Run workflow", or push a tag like v0.4.1.
+# It runs on every push to main, or from the Actions tab with "Run workflow".
 # The files land under Artifacts on the run's page.
 name: Build
 
 on:
   workflow_dispatch:
   push:
-    tags: ['v*']
+    branches: [main]
 
 jobs:
   windows:
