@@ -1,0 +1,86 @@
+# Builds the Windows installer and the two Mac apps (Apple Silicon and Intel).
+# Run it from the Actions tab with "Run workflow", or push a tag like v0.4.1.
+# The files land under Artifacts on the run's page.
+name: Build
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - run: npm ci
+      - run: npx tauri build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Video Editor for Windows
+          path: src-tauri/target/release/bundle/nsis/*.exe
+          retention-days: 30
+
+  mac:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - run: npm ci
+
+      - name: Build whisper-cli for both kinds of Mac
+        run: |
+          git clone --depth 1 --branch v1.8.2 https://github.com/ggml-org/whisper.cpp /tmp/whisper
+          mkdir -p src-tauri/binaries
+          for pair in "arm64 aarch64-apple-darwin" "x86_64 x86_64-apple-darwin"; do
+            set -- $pair
+            cmake -S /tmp/whisper -B /tmp/whisper/build-$1 -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES=$1 \
+              -DCMAKE_OSX_DEPLOYMENT_TARGET=13.3 -DBUILD_SHARED_LIBS=OFF -DGGML_NATIVE=OFF -DGGML_METAL=ON \
+              -DGGML_METAL_EMBED_LIBRARY=ON -DWHISPER_BUILD_TESTS=OFF -DWHISPER_SDL2=OFF
+            cmake --build /tmp/whisper/build-$1 --config Release -j 4 --target whisper-cli
+            cp /tmp/whisper/build-$1/bin/whisper-cli src-tauri/binaries/whisper-cli-$2
+          done
+          file src-tauri/binaries/*
+
+      - name: Download FFmpeg for both kinds of Mac
+        run: |
+          for pair in "arm64 aarch64-apple-darwin" "amd64 x86_64-apple-darwin"; do
+            set -- $pair
+            for tool in ffmpeg ffprobe; do
+              curl -fsSL -o /tmp/$tool-$1.zip "https://ffmpeg.martin-riedl.de/redirect/latest/macos/$1/release/$tool.zip"
+              unzip -o -q /tmp/$tool-$1.zip -d /tmp/$tool-$1
+              cp /tmp/$tool-$1/$tool src-tauri/binaries/$tool-$2
+            done
+          done
+          chmod +x src-tauri/binaries/*
+          file src-tauri/binaries/*
+
+      - name: Build the Apple Silicon app
+        run: npx tauri build --target aarch64-apple-darwin
+      - name: Build the Intel app
+        run: npx tauri build --target x86_64-apple-darwin
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Video Editor for Mac
+          path: |
+            src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
+            src-tauri/target/x86_64-apple-darwin/release/bundle/dmg/*.dmg
+          retention-days: 30
