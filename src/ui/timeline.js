@@ -64,6 +64,7 @@ export class Timeline {
       this.drawVisibleCanvases();
     }, 30));
     this.scroll.addEventListener('wheel', (e) => this.onWheel(e), { passive: false });
+    this.rulerWrap.addEventListener('wheel', (e) => this.onWheel(e), { passive: false });
     this.rulerCanvas.addEventListener('pointerdown', (e) => this.onRulerDown(e));
     this.content.addEventListener('pointerdown', (e) => this.onContentDown(e));
     // a click in the empty space under the tracks clears the selection too
@@ -618,15 +619,42 @@ export class Timeline {
 
   // ---- input ---------------------------------------------------------------------
 
+  /**
+   * Mouse wheel: zooms in and out around the pointer. Shift+wheel or a
+   * sideways trackpad swipe scrolls left and right. Over the track names, or
+   * with Alt held, it scrolls the tracks up and down.
+   */
   onWheel(e) {
-    if (e.ctrlKey || e.metaKey) {
-      e.preventDefault();
-      const t = this.timeAt(e.clientX);
-      this.setZoom(store.zoom * (e.deltaY < 0 ? 1.15 : 1 / 1.15), t);
-    } else if (e.shiftKey) {
-      e.preventDefault();
-      this.scroll.scrollLeft += e.deltaY;
+    const r = this.scroll.getBoundingClientRect();
+    const overHeads = e.clientX < r.left + HEAD_W && e.currentTarget === this.scroll;
+    if (e.altKey || (overHeads && !e.ctrlKey && !e.metaKey)) return; // the browser scrolls the tracks
+    e.preventDefault();
+    if (e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
+      this.scroll.scrollLeft += e.shiftKey && !e.deltaX ? e.deltaY : e.deltaX;
+      return;
     }
+    // a mouse notch is about 100; trackpads send many small steps
+    const dy = e.deltaMode === 1 ? e.deltaY * 33 : e.deltaY;
+    const factor = Math.exp(-Math.max(-300, Math.min(300, dy)) * 0.0016);
+    // many wheel events in one frame become one redraw
+    const w = (this._wheel ||= { factor: 1, t: 0, raf: 0 });
+    w.factor *= factor;
+    w.t = this.timeAt(Math.max(r.left + HEAD_W, e.clientX));
+    if (!w.raf)
+      w.raf = requestAnimationFrame(() => {
+        w.raf = 0;
+        const f = w.factor;
+        w.factor = 1;
+        this.setZoom(store.zoom * f, w.t);
+      });
+  }
+
+  /** Scrolls so the playhead is in view, with a little room to its left. */
+  revealPlayhead() {
+    const x = store.playhead * store.zoom;
+    const vw = this.scroll.clientWidth - HEAD_W;
+    const left = this.scroll.scrollLeft;
+    if (x < left + 20 || x > left + vw - 40) this.scroll.scrollLeft = Math.max(0, x - 60);
   }
 
   onRulerDown(e) {

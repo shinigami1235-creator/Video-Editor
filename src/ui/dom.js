@@ -32,6 +32,8 @@ export function clear(el) {
 const P = {
   play: '<path d="M7 4.5v15l12.5-7.5z" fill="currentColor" stroke="none"/>',
   pause: '<rect x="6" y="4.5" width="4" height="15" rx="1" fill="currentColor" stroke="none"/><rect x="14" y="4.5" width="4" height="15" rx="1" fill="currentColor" stroke="none"/>',
+  toStart: '<path d="M5 5v14"/><path d="M19 5v14l-6-7z M13 5v14l-6-7z" fill="currentColor" stroke="none"/>',
+  toEnd: '<path d="M19 5v14"/><path d="M5 5v14l6-7z M11 5v14l6-7z" fill="currentColor" stroke="none"/>',
   prev: '<path d="M18 5v14L8 12z" fill="currentColor" stroke="none"/><path d="M6 5v14"/>',
   next: '<path d="M6 5v14l10-7z" fill="currentColor" stroke="none"/><path d="M18 5v14"/>',
   stepBack: '<path d="M15 6l-6 6 6 6"/>',

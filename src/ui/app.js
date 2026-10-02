@@ -460,8 +460,8 @@ export class App {
         ArrowRight: () => this.cmd('stepFrame', e.shiftKey ? 10 : 1),
         ArrowUp: () => this.cmd('prevEdit'),
         ArrowDown: () => this.cmd('nextEdit'),
-        Home: () => this.seek(0),
-        End: () => this.seek(projectDuration(store.project)),
+        Home: () => this.cmd('goStart'),
+        End: () => this.cmd('goEnd'),
         i: () => this.cmd('setIn'),
         o: () => this.cmd('setOut'),
         m: () => this.cmd('marker'),
@@ -948,6 +948,18 @@ export class App {
       }
     });
     toast(props[0] === 'volume' ? 'Volume point added. Drag the yellow line on the clip to change the volume from here.' : 'Keyframe added. Change position, size, rotation or opacity at another time to animate.', { timeout: 3000 });
+  }
+
+  c_goStart() {
+    if (this.preview.playing) this.preview.pause();
+    this.seek(0);
+    this.timeline?.revealPlayhead();
+  }
+
+  c_goEnd() {
+    if (this.preview.playing) this.preview.pause();
+    this.seek(projectDuration(store.project));
+    this.timeline?.revealPlayhead();
   }
 
   c_stepFrame(n = 1) {

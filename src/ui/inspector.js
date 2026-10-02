@@ -186,7 +186,9 @@ export class Inspector {
       ['Ctrl+Z / Ctrl+Y', 'Undo and redo'],
       ['Ctrl+S', 'Save'],
       ['Ctrl+E', 'Export'],
-      ['+ / -', 'Zoom the timeline'],
+      ['+ / - or mouse wheel', 'Zoom the timeline'],
+      ['Shift+wheel', 'Scroll the timeline sideways'],
+      ['Home / End', 'Go to the start or the end'],
     ];
     return h('div', { class: 'keys' }, ...rows.map(([k, v]) => h('div', { class: 'key-row' }, h('kbd', {}, keyLabel(k)), h('span', {}, v))));
   }

@@ -83,11 +83,13 @@ export class Viewer {
       h(
         'div',
         { class: 'transport-mid' },
+        iconButton('toStart', () => this.app.cmd('goStart'), 'Go to the start (Home)'),
         iconButton('prev', () => this.app.cmd('prevEdit'), 'Previous cut (Up)'),
         iconButton('stepBack', () => this.app.cmd('stepFrame', -1), 'Back one frame (Left)'),
         this.playBtn,
         iconButton('stepFwd', () => this.app.cmd('stepFrame', 1), 'Forward one frame (Right)'),
         iconButton('next', () => this.app.cmd('nextEdit'), 'Next cut (Down)'),
+        iconButton('toEnd', () => this.app.cmd('goEnd'), 'Go to the end (End)'),
       ),
       h('div', { class: 'transport-right' }, this.loopBtn, this.safeBtn, h('span', { class: 'icon-wrap', title: 'Preview volume' }, icon('volume', 16)), vol, this.qualitySel, (this.fullBtn = iconButton('expand', () => this.fullscreen(), 'Full screen preview'))),
     );

@@ -152,7 +152,9 @@ The face finder is only 1.2 MB and comes with the editor. The speech model can b
 | C | Crop on the preview |
 | T | Add text |
 | N | Snapping on or off |
-| + and - | Zoom the timeline |
+| + and -, or the mouse wheel | Zoom the timeline around the pointer |
+| Shift+wheel | Scroll the timeline sideways |
+| Home, End | Go to the start or the end (also the buttons beside the play controls) |
 | Shift+Z | Fit the whole project |
 | Ctrl+Z, Ctrl+Y | Undo and redo |
 | Ctrl+S | Save |

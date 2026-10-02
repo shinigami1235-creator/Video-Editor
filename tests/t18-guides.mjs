@@ -44,6 +44,9 @@ try {
   await page.evaluate(() => (window.__snapGuide = JSON.stringify(window.__store.project)));
 
   const restore = async (audio = false) => {
+    // jobs a previous guide started (captions, noise removal) are cancelled first
+    await page.evaluate(() => document.querySelectorAll('.job .job-x').forEach((b) => b.click()));
+    await page.waitForFunction(() => !document.querySelector('.jobs .job'), null, { timeout: 30000 }).catch(() => {});
     await page.evaluate((audio) => {
       document.querySelectorAll('.modal-overlay').forEach((m) => m.remove());
       document.querySelector('.ctx')?.remove();
