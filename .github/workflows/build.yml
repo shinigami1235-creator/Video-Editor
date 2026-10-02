@@ -84,3 +84,30 @@ jobs:
             src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
             src-tauri/target/x86_64-apple-darwin/release/bundle/dmg/*.dmg
           retention-days: 30
+
+  # Puts the newest installers on the repository's Releases page, which anyone
+  # can download from without a GitHub account.
+  release:
+    needs: [windows, mac]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: built
+      - name: Give the files plain names
+        run: |
+          mkdir out
+          cp built/"Video Editor for Windows"/*.exe out/Video-Editor-Windows-Setup.exe
+          cp built/"Video Editor for Mac"/aarch64-apple-darwin/release/bundle/dmg/*.dmg out/Video-Editor-Mac-Apple-Silicon.dmg
+          cp built/"Video Editor for Mac"/x86_64-apple-darwin/release/bundle/dmg/*.dmg out/Video-Editor-Mac-Intel.dmg
+          ls -la out
+      - name: Replace the newest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release delete newest --cleanup-tag --yes || true
+          gh release create newest out/* --target "$GITHUB_SHA" --title "Video Editor (newest build)" --latest \
+            --notes "Windows: download Video-Editor-Windows-Setup.exe. Mac with an M chip or an A18 Pro chip: download Video-Editor-Mac-Apple-Silicon.dmg. Older Intel Mac: download Video-Editor-Mac-Intel.dmg."
