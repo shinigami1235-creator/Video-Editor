@@ -9,19 +9,23 @@ import { basename } from '../backend/index.js';
 
 export async function showWelcome(app, { newOnly = false } = {}) {
   const recover = newOnly ? [] : await findRecoverable().catch(() => []);
-  let preset = CANVAS_PRESETS.find((c) => c.id === (store.settings.lastPreset || 'reels')) || CANVAS_PRESETS[0];
+  // "Match my video" takes the shape of the first video put on the timeline
+  const MATCH = { id: 'match', name: 'Match my video', width: 1920, height: 1080, match: true };
+  const PRESETS = [MATCH, ...CANVAS_PRESETS];
+  // Match my video is picked until a shape is chosen on this version of the start screen
+  let preset = (store.settings.presetPicked && PRESETS.find((c) => c.id === store.settings.lastPreset)) || MATCH;
   let fps = 30;
   const name = h('input', { type: 'text', value: 'Untitled project', class: 'big-input' });
   const grid = h('div', { class: 'preset-cards' });
   const drawGrid = () => {
     clear(grid);
-    for (const c of CANVAS_PRESETS) {
+    for (const c of PRESETS) {
       const ratio = c.width / c.height;
-      const box = h('div', { class: 'aspect', style: { width: (ratio >= 1 ? 54 : 54 * ratio) + 'px', height: (ratio >= 1 ? 54 / ratio : 54) + 'px' } });
+      const box = c.match ? h('div', { class: 'aspect match' }) : h('div', { class: 'aspect', style: { width: (ratio >= 1 ? 54 : 54 * ratio) + 'px', height: (ratio >= 1 ? 54 / ratio : 54) + 'px' } });
       const b = h('button', { class: 'preset-card' + (c.id === preset.id ? ' active' : ''), type: 'button', onclick: () => {
         preset = c;
         drawGrid();
-      } }, h('div', { class: 'aspect-wrap' }, box), h('div', { class: 'pc-name' }, c.name), h('div', { class: 'pc-sub' }, `${c.width} x ${c.height}`));
+      } }, h('div', { class: 'aspect-wrap' }, box), h('div', { class: 'pc-name' }, c.name), h('div', { class: 'pc-sub' }, c.match ? 'Same shape as the video' : `${c.width} x ${c.height}`));
       grid.append(b);
     }
   };
@@ -110,8 +114,11 @@ export async function showWelcome(app, { newOnly = false } = {}) {
         label: 'Create project',
         primary: true,
         run: (close) => {
-          createProject({ name: name.value.trim() || 'Untitled project', width: preset.width, height: preset.height, fps, audioOnly: audio });
-          if (!audio) app.saveSetting('lastPreset', preset.id);
+          createProject({ name: name.value.trim() || 'Untitled project', width: preset.width, height: preset.height, fps, audioOnly: audio, matchFirst: !!preset.match });
+          if (!audio) {
+            app.saveSetting('lastPreset', preset.id);
+            app.saveSetting('presetPicked', true);
+          }
           app.saveSetting('lastProjectType', audio ? 'audio' : 'video');
           close(true);
         },

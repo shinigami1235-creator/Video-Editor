@@ -3,7 +3,7 @@
 import { h, icon, iconButton, clear, button, select, keyLabel } from './dom.js';
 import { store } from '../core/store.js';
 import * as E from '../core/edit.js';
-import { newText, newShape, newBlurRegion, newAdjustment, newSolid, itemEnd, trackItems, visualTracks, isVisualItem, sourceTime, projectDuration, cloneItem, CANVAS_PRESETS, keyframeTimes } from '../core/model.js';
+import { newText, newShape, newBlurRegion, newAdjustment, newSolid, itemEnd, trackItems, visualTracks, isVisualItem, sourceTime, projectDuration, cloneItem, CANVAS_PRESETS, keyframeTimes, canvasForMedia, frameShape } from '../core/model.js';
 import { setProp, getProp, localTime } from '../core/props.js';
 import { uid, clone, formatTime } from '../core/util.js';
 import { Timeline, dragSession } from './timeline.js';
@@ -565,6 +565,13 @@ export class App {
   addMedia(mediaList, t = store.playhead, trackId = null) {
     const list = mediaList.filter((m) => m.status !== 'error');
     if (!list.length) return;
+    const p0 = store.project;
+    const firstPicture = !p0.settings.audioOnly && !Object.values(p0.items).some((it) => it.type === 'clip' && isVisualItem(p0, it) && p0.media[it.mediaId]?.kind === 'video');
+    const video = list.find((m) => m.kind === 'video');
+    if (firstPicture && video) {
+      if (video.status === 'ready') setTimeout(() => this.fitCanvasTo(video), 0);
+      else whenReady(video).then((mm) => this.fitCanvasTo(mm)).catch(() => {});
+    }
     let added = [];
     store.commit('Add to timeline', (p) => {
       added = E.addMediaToTimeline(p, list, t, { trackId });
@@ -588,6 +595,46 @@ export class App {
         })
         .catch(() => {});
     }
+  }
+
+  /**
+   * The first video on the timeline: a "Match my video" project takes its
+   * shape right away, any other project offers to when the shapes differ.
+   */
+  fitCanvasTo(m) {
+    const p = store.project;
+    if (!m?.width || !m?.height || p.settings.audioOnly) return;
+    const c = canvasForMedia(m);
+    if (p.settings.matchFirst) {
+      store.commit('Match the video', (pp) => {
+        Object.assign(pp.settings, c);
+        delete pp.settings.matchFirst;
+      });
+      return toast(`The frame is ${c.width} x ${c.height} now to match ${m.name}.`, { timeout: 4000 });
+    }
+    const s = p.settings;
+    if (Math.abs(m.width / m.height / (s.width / s.height) - 1) < 0.03) return;
+    toast(`${m.name} is ${frameShape(m.width, m.height)} while the frame is ${frameShape(s.width, s.height)}, so it shows small with bars around it.`, {
+      timeout: 12000,
+      action: { label: 'Match the video', run: () => this.cmd('matchCanvas', m) },
+    });
+  }
+
+  /** Sets the frame to the shape and size of a video (the selected clip's, or the first on the timeline). */
+  c_matchCanvas(m = null) {
+    const p = store.project;
+    if (!m) {
+      const sel = store.primary && p.media[store.primary.mediaId];
+      const first = Object.values(p.items).filter((it) => it.type === 'clip' && isVisualItem(p, it) && p.media[it.mediaId]?.kind === 'video').sort((a, b) => a.start - b.start)[0];
+      m = sel?.kind === 'video' ? sel : first ? p.media[first.mediaId] : null;
+    }
+    if (!m?.width) return toast('Put a video on the timeline first.', { timeout: 2500 });
+    const c = canvasForMedia(m);
+    store.commit('Match the video', (pp) => {
+      Object.assign(pp.settings, c);
+      delete pp.settings.matchFirst;
+    });
+    toast(`The frame is ${c.width} x ${c.height} now to match ${m.name}.`, { timeout: 4000 });
   }
 
   // ---- commands ------------------------------------------------------------------

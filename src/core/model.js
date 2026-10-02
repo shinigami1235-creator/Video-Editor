@@ -14,7 +14,27 @@ export const CANVAS_PRESETS = [
   { id: 'cinema', name: 'Cinematic 2.39:1', width: 1920, height: 804 },
 ];
 
-export function newProject({ name = 'Untitled project', width = 1080, height = 1920, fps = 30, audioOnly = false } = {}) {
+/** A frame the same shape and size as a video (at least 720 on the short side, at most 4K). */
+export function canvasForMedia(m) {
+  let w = m.width || 1920;
+  let h = m.height || 1080;
+  const k = Math.max(720 / Math.min(w, h), 1) * Math.min(1, 3840 / Math.max(w, h));
+  w = Math.max(2, Math.round((w * k) / 2) * 2);
+  h = Math.max(2, Math.round((h * k) / 2) * 2);
+  const f = m.fps || 30;
+  const fps = [24, 25, 30, 50, 60].reduce((b, x) => (Math.abs(x - f) < Math.abs(b - f) ? x : b), 30);
+  return { width: w, height: h, fps };
+}
+
+/** "16:9", "9:16", "4:5" and so on, or the size when it is none of the usual shapes. */
+export function frameShape(w, h) {
+  const r = w / h;
+  const known = [['16:9', 16 / 9], ['9:16', 9 / 16], ['4:5', 4 / 5], ['1:1', 1], ['4:3', 4 / 3], ['3:4', 3 / 4], ['2.39:1', 2.39]];
+  const hit = known.find(([, v]) => Math.abs(r / v - 1) < 0.03);
+  return hit ? hit[0] : `${w} x ${h}`;
+}
+
+export function newProject({ name = 'Untitled project', width = 1080, height = 1920, fps = 30, audioOnly = false, matchFirst = false } = {}) {
   const v1 = newTrack('video', 'Video 1');
   const a1 = newTrack('audio', 'Audio 1');
   const tracks = [v1, a1];
@@ -29,7 +49,7 @@ export function newProject({ name = 'Untitled project', width = 1080, height = 1
     version: PROJECT_VERSION,
     id: uid('p'),
     name,
-    settings: { width: audioOnly ? 1920 : width, height: audioOnly ? 1080 : height, fps, background: '#000000', sampleRate: 48000, ...(audioOnly ? { audioOnly: true } : {}) },
+    settings: { width: audioOnly ? 1920 : width, height: audioOnly ? 1080 : height, fps, background: '#000000', sampleRate: 48000, ...(audioOnly ? { audioOnly: true } : {}), ...(matchFirst && !audioOnly ? { matchFirst: true } : {}) },
     media: {},
     tracks,
     items: {},

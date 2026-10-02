@@ -2468,3 +2468,11 @@ body.audio-mode .video-only {
 .guide-search {
   width: 100%;
 }
+
+.aspect.match {
+  width: 50px;
+  height: 36px;
+  border-style: dashed;
+  background: linear-gradient(135deg, transparent 46%, var(--gold2) 47%, var(--gold2) 53%, transparent 54%);
+  opacity: 0.85;
+}

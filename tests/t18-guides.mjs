@@ -139,6 +139,18 @@ try {
       });
       return page.keyboard.press('Delete');
     }
+    if (/empty part of the timeline/.test(txt)) {
+      if (process.env.GUIDE_LOG) console.log('    hit', await page.evaluate(([x, y]) => document.elementFromPoint(x, y)?.className, [s.rect.x, s.rect.y + s.rect.h / 2 - 20]));
+      return page.mouse.click(s.rect.x, s.rect.y + s.rect.h / 2 - 20);
+    }
+    if (s.tag === 'SELECT') {
+      await page.evaluate(() => {
+        const el = window.__guide.steps[window.__guide.index]._target;
+        el.value = 'match';
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+      return;
+    }
     if (/press Delete/.test(txt)) {
       await page.evaluate(() => document.activeElement?.blur?.());
       return page.keyboard.press('Delete');

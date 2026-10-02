@@ -99,6 +99,7 @@ The editor reads my original videos and never changes them. Every imported video
 - **Level out the voice:** a compressor that brings quiet words up and loud ones down so a voice sits at one steady level. It's next to Remove background noise and Even out loudness.
 - **Audio export:** MP3, M4A or WAV with an optional podcast loudness of -16 LUFS and a size estimate, plus the transcript as text with times or as SRT subtitles.
 - **Switching:** Tools, then "Switch to an audio project" (or back to video), or Project type in the panel on the right when nothing is selected. Nothing on the timeline is lost, and if the first audio track has gaps, Magnetic turns off so nothing moves.
+- **Match my video:** a new project can take the shape and size of the first video put on the timeline, which is the default on the start screen. Putting a 16:9 video into a 9:16 project offers a Match the video button, and Canvas in the project settings has Match a video on the timeline.
 - **How-to guides:** press F1, click the ? at the top right, or open Help. Picking a task such as "Separate the sound from a video" lights up each button to press in turn and moves on by itself once the step is done. There are 27 guides, and audio projects show only the ones that apply.
 - **Paid services off:** Claude and Replicate stay switched off and hidden until I turn on Paid services in Settings. Everything else runs free on this computer.
 

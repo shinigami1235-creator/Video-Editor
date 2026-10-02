@@ -115,6 +115,18 @@ export const GUIDES = [
     finish: 'The video is on the timeline. Double-click a card in the Media panel to add it at the playhead.',
   },
   {
+    id: 'frame',
+    group: 'Basics',
+    title: 'Make the frame match your video',
+    video: true,
+    steps: () => [
+      ...haveClip('video'),
+      { text: 'Click an empty part of the timeline so nothing is selected.', target: () => q('.tl-scroll'), done: () => !store.primary },
+      { text: 'Under Canvas on the right, pick Match a video on the timeline.', target: () => [...document.querySelectorAll('.inspector select')].find((el) => shown(el) && [...el.options].some((o) => o.value === 'match')) || null, goal: (did) => did('Match the video') },
+    ],
+    finish: 'The frame has the same shape as the video now. Exports come out that shape too.',
+  },
+  {
     id: 'cut',
     group: 'Basics',
     title: 'Cut out a part of a clip',

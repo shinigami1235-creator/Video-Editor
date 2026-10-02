@@ -5,7 +5,7 @@ import { h, iconButton, button, select, slider, toggle, clear } from './dom.js';
 import { modal, toast } from './notify.js';
 import { store } from '../core/store.js';
 import * as E from '../core/edit.js';
-import { itemEnd, trackItems, CANVAS_PRESETS } from '../core/model.js';
+import { itemEnd, trackItems, CANVAS_PRESETS, canvasForMedia } from '../core/model.js';
 import { importFiles, thumbUrl, whenReady, VIDEO_EXT, IMAGE_EXT, AUDIO_EXT } from '../media/library.js';
 import { openDialog, stat } from '../backend/index.js';
 import { TRANSITION_TYPES } from '../render/shaders.js';
@@ -139,8 +139,8 @@ export async function showStitch(app, { mediaIds = null, fresh = false, audio = 
           } else if (fresh) {
             const first = list.find((m) => m.kind === 'video') || list[0];
             await whenReady(first).catch(() => {});
-            const c = canvasFor(first);
-            createProject({ name: 'Stitched ' + new Date().toLocaleDateString(), width: c.width, height: c.height, fps: Math.round(first.fps) === 60 ? 60 : 30 });
+            const c = first.kind === 'video' && first.width ? canvasForMedia(first) : canvasFor(first);
+            createProject({ name: 'Stitched ' + new Date().toLocaleDateString(), width: c.width, height: c.height, fps: c.fps || (Math.round(first.fps) === 60 ? 60 : 30) });
             for (const m of list) if (!store.project.media[m.id]) store.project.media[m.id] = m;
             store.emit('media');
           }

@@ -132,9 +132,10 @@ export class Inspector {
     const presetVal = CANVAS_PRESETS.find((c) => c.width === s.width && c.height === s.height)?.id || 'custom';
     const presetSel = select(
       'Canvas',
-      [...CANVAS_PRESETS.map((c) => [c.id, c.name]), ['custom', 'Custom size']],
+      [['match', 'Match a video on the timeline'], ...CANVAS_PRESETS.map((c) => [c.id, c.name]), ['custom', 'Custom size']],
       presetVal,
       (v) => {
+        if (v === 'match') return this.app.cmd('matchCanvas');
         const c = CANVAS_PRESETS.find((x) => x.id === v);
         if (c) this.set('Canvas size', () => Object.assign(s, { width: c.width, height: c.height }));
       },

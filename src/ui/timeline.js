@@ -66,6 +66,10 @@ export class Timeline {
     this.scroll.addEventListener('wheel', (e) => this.onWheel(e), { passive: false });
     this.rulerCanvas.addEventListener('pointerdown', (e) => this.onRulerDown(e));
     this.content.addEventListener('pointerdown', (e) => this.onContentDown(e));
+    // a click in the empty space under the tracks clears the selection too
+    this.scroll.addEventListener('pointerdown', (e) => {
+      if (e.button === 0 && (e.target === this.scroll || e.target === this.inner) && !e.shiftKey && !e.ctrlKey) store.clearSelection();
+    });
     this.content.addEventListener('contextmenu', (e) => this.onContext(e));
     this.content.addEventListener('dblclick', (e) => {
       const el = e.target.closest('.tl-clip');

@@ -23,7 +23,7 @@ export const DEFAULT_SETTINGS = {
   replicateAvatarModel: 'cjwbw/sadtalker',
   recentProjects: [],
   exportFolder: '',
-  lastPreset: 'reels',
+  lastPreset: 'match',
   brandKits: [],
   userLuts: [],
   userTemplates: [],
