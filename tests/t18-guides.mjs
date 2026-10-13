@@ -6,7 +6,7 @@ import fs from 'node:fs';
 
 const only = process.argv[2];
 // guides that record from a microphone or run long AI models only get their first steps checked
-const SHALLOW = new Set(['voiceover', 'removebg', 'faces', 'fillSubject']);
+const SHALLOW = new Set(['voiceover', 'removebg', 'faces', 'fillSubject', 'silhouette']);
 
 await startServers();
 try {
@@ -197,8 +197,8 @@ try {
       const key = `${st.index}|${st.text}`;
       stuck = key === lastKey ? stuck + 1 : 0;
       lastKey = key;
-      // long jobs (captions, noise removal) get time; anything else stuck 6 times is a failure
-      if (stuck > (/^Wait for/.test(st.text || '') ? 80 : 6)) {
+      // long jobs (captions, noise removal, a three-shape export) get time; anything else stuck 6 times is a failure
+      if (stuck > (/^Wait for/.test(st.text || '') ? 200 : 6)) {
         problems.push(`stuck at "${(st.text || '').slice(0, 60)}"`);
         break;
       }

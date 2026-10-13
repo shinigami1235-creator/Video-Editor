@@ -672,9 +672,41 @@ export class Inspector {
     return out;
   }
 
+  silhouetteSection(it) {
+    const fx = it.effects;
+    const sil = fx.silhouette;
+    if (!sil?.on) {
+      return section(
+        'Silhouette',
+        button('Make a silhouette', () => this.app.cmd('silhouette', it), { icon: 'person', title: 'Cuts out the subject if needed, then fills it with one colour' }),
+        button('Add a shadow that follows it', () => this.app.cmd('silhouetteShadow', it), { title: 'A soft dark copy of the subject on the layer below' }),
+        h('div', { class: 'hint' }, 'Turns the cut-out person or object into a flat shape in any colour. It follows every movement in the clip.'),
+      );
+    }
+    const swatches = h('div', { class: 'chips' });
+    for (const [name, c] of [['Black', '#000000'], ['White', '#ffffff'], ['Gold', '#c9a24a'], ['Rose', '#e8a0b4'], ['Teal', '#2bb3a3']])
+      swatches.append(h('button', { class: 'chip' + (sil.color === c ? ' active' : ''), type: 'button', onclick: () => this.set('Silhouette colour', () => (sil.color = c)) }, name));
+    return section(
+      'Silhouette',
+      toggle('Silhouette', true, (v) => this.set('Silhouette', () => (sil.on = v))),
+      select('Look', [['fill', 'Solid colour'], ['shaded', 'Colour with shading'], ['outline', 'Outline only']], sil.style || 'fill', (v) => this.set('Silhouette look', () => (sil.style = v))),
+      colorInput('Colour', sil.color || '#000000', (v, done) => (done ? this.set('Silhouette colour', () => (sil.color = v)) : store.mutate(() => (sil.color = v)))),
+      swatches,
+      sil.style === 'outline' ? this.valSlider('Line width', sil, 'width', { min: 1, max: 40, step: 1, def: 6, unit: 'px' }) : null,
+      h(
+        'div',
+        { class: 'btn-row wrap' },
+        button('Add a shadow that follows it', () => this.app.cmd('silhouetteShadow', it)),
+        button('Fill it with the clip above', () => this.app.cmd('fillSilhouette', it), { title: 'Shows the clip on the layer above only inside this shape' }),
+      ),
+      h('div', { class: 'hint' }, 'To put a second video inside the shape, place it on a layer above this clip and press Fill it with the clip above. Glow in Effects below makes the shape or outline shine.'),
+    );
+  }
+
   fxTab(it) {
     const fx = it.effects;
     const out = h('div', {});
+    if (it.type === 'clip' && isVisualItem(store.project, it)) out.append(this.silhouetteSection(it));
     if (it.type === 'clip') {
       const ch = fx.chroma;
       out.append(
@@ -841,7 +873,7 @@ export class Inspector {
       out.append(
         section(
           'Background',
-          h('div', { class: 'btn-row wrap' }, button(bgDone ? 'Put the background back' : 'Remove background', () => this.app.cmd('removeBackground', it), { icon: 'person' }), button('Green screen', () => {
+          h('div', { class: 'btn-row wrap' }, button(bgDone ? 'Put the background back' : 'Remove background', () => this.app.cmd('removeBackground', it), { icon: 'person' }), button('Make a silhouette', () => this.app.cmd('silhouette', it)), button('Green screen', () => {
             this.tab[it.type + 'v'] = 'fx';
             this.set('Green screen', () => (it.effects.chroma.enabled = true));
           })),

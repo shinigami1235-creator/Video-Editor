@@ -379,6 +379,25 @@ export const GUIDES = [
     finish: 'The top clip shows only inside the subject now. Set its Blend mode to Lighten or Screen to mix it with the subject instead of covering it.',
   },
   {
+    id: 'silhouette',
+    group: 'Look',
+    title: 'Turn a person or object into a silhouette',
+    video: true,
+    steps: () => {
+      const silOn = () => !!store.primary?.effects?.silhouette?.on;
+      const press = pressStep('Click Make a silhouette.', () => byText('.inspector button', 'Make a silhouette'), silOn);
+      const picked = () => silOn() || (!!press._clicked && !modalTitled('Remove background'));
+      return [
+        ...selectClip('visual'),
+        tabStep('Effects'),
+        press,
+        { text: 'Pick what should stay in the picture, such as People or Products and objects.', target: () => modalTitled('Remove background')?.querySelector('.modal-body') || null, done: picked },
+        waitJob('Wait for the bar at the bottom right to finish. It takes about as long as the clip.', () => silOn() || (picked() && !q('.jobs .job'))),
+      ];
+    },
+    finish: 'The subject is a black silhouette now. Pick another colour or Outline only in the Silhouette section, or press Add a shadow that follows it.',
+  },
+  {
     id: 'overlay',
     group: 'Look',
     title: 'Add sparkles, dust or a light leak',

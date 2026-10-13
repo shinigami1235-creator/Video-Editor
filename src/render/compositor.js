@@ -1,7 +1,7 @@
 // WebGL2 compositor shared by the preview and the export. It draws every
 // visible item at time t, bottom track first, into premultiplied layers.
 
-import { VS_QUAD, VS_FULL, FS_LAYER, FS_ADJUST, FS_COPY, FS_BLUR, FS_COMPOSITE, FS_ADD, FS_TRANSITION, FS_REGION, FS_PARTICLES, FS_MATTE, TRANSITION_TYPES } from './shaders.js';
+import { VS_QUAD, VS_FULL, FS_LAYER, FS_LAYER_OUTLINE, FS_ADJUST, FS_COPY, FS_BLUR, FS_COMPOSITE, FS_ADD, FS_TRANSITION, FS_REGION, FS_PARTICLES, FS_MATTE, TRANSITION_TYPES } from './shaders.js';
 import { visualTracks, trackItems, itemEnd, propAt, animState, sourceTimeUnclamped, previousAdjacent, nextAdjacent } from '../core/model.js';
 import { parseColor, clamp } from '../core/util.js';
 import { rasterText, rasterShape } from './text.js';
@@ -118,6 +118,7 @@ export class Compositor {
     gl.pixelStorei(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, gl.NONE);
     this.progs = {
       layer: this._program(VS_QUAD, FS_LAYER),
+      layerOutline: this._program(VS_QUAD, FS_LAYER_OUTLINE),
       adjust: this._program(VS_FULL, FS_ADJUST),
       copy: this._program(VS_FULL, FS_COPY),
       blur: this._program(VS_FULL, FS_BLUR),
@@ -658,7 +659,8 @@ export class Compositor {
     const target = this._target(ctx.rw, ctx.rh);
     this._clear(target);
     gl.disable(gl.BLEND);
-    this._use(this.progs.layer, {
+    const silU = this._silUniforms(it, cw, ch, sx, sy);
+    this._use(silU.u_sil === 3 ? this.progs.layerOutline : this.progs.layer, {
       ...cu,
       u_mat: mat,
       u_src: tex || this.white,
@@ -707,6 +709,7 @@ export class Compositor {
       u_letterbox: fx.letterbox || 0,
       u_mirror: !!fx.mirror,
       u_grade: cu._grade,
+      ...silU,
     });
     this._draw();
 
@@ -725,6 +728,18 @@ export class Compositor {
       out = o2;
     }
     return out;
+  }
+
+  /** Silhouette: the cut-out turned into one colour, shaded, or an outline. */
+  _silUniforms(it, cw, ch, sx, sy) {
+    const sil = it.type === 'clip' && it.effects?.silhouette;
+    if (!sil?.on) return { u_sil: 0, u_silColor: [0, 0, 0], u_silR: [0, 0] };
+    const w = Math.max(1, sil.width ?? 6) / 2;
+    return {
+      u_sil: { fill: 1, shaded: 2, outline: 3 }[sil.style] || 1,
+      u_silColor: parseColor(sil.color || '#000000').slice(0, 3),
+      u_silR: [w / Math.max(1, cw * Math.abs(sx)), w / Math.max(1, ch * Math.abs(sy))],
+    };
   }
 
   /** Procedural overlay (dust, sparkles, bokeh, light leak, flare). */

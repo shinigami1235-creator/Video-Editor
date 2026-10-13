@@ -33,7 +33,7 @@ const GUIDE_TITLES = {
 };
 
 // commands that only make sense with a picture; audio projects skip them
-const VIDEO_ONLY = new Set(['addText', 'addShape', 'addBlur', 'addAdjustment', 'addSolid', 'crop', 'freeze', 'splitScreen', 'pip', 'freehandMask', 'depthShot', 'addFx', 'alignFaces', 'upscale', 'aiUpscale', 'removeBackground', 'autoReframe', 'faceBlur', 'stabilize', 'smoothSlowmo', 'syncAngles', 'switchAngles', 'trackMask', 'recordScreen', 'shorts', 'avatar', 'saveTemplate', 'scriptToVideo', 'captions', 'translate', 'chapters', 'detachAudio', 'fillSubjectBelow']);
+const VIDEO_ONLY = new Set(['addText', 'addShape', 'addBlur', 'addAdjustment', 'addSolid', 'crop', 'freeze', 'splitScreen', 'pip', 'freehandMask', 'depthShot', 'addFx', 'alignFaces', 'upscale', 'aiUpscale', 'removeBackground', 'autoReframe', 'faceBlur', 'stabilize', 'smoothSlowmo', 'syncAngles', 'switchAngles', 'trackMask', 'recordScreen', 'shorts', 'avatar', 'saveTemplate', 'scriptToVideo', 'captions', 'translate', 'chapters', 'detachAudio', 'fillSubjectBelow', 'silhouette', 'silhouetteShadow', 'fillSilhouette']);
 
 export class App {
   constructor(root) {
@@ -654,6 +654,101 @@ export class App {
     await this.cmd('removeBackground', store.project.items[copyId]);
     // the model window was closed or the cut-out failed: take the copy out again
     if (!store.project.items[copyId]?.derivations?.includes('bg') && store.undoStack.at(-1)?.label === 'Fill the subject') store.undo();
+  }
+
+  /** True when the clip already has see-through parts: cut out, keyed, or a photo with transparency. */
+  async hasCutOut(it) {
+    const m = store.project.media[it.mediaId];
+    if (!m) return false;
+    if (it.derivations?.includes('bg') || it.effects?.chroma?.enabled || m.alphaPacked) return true;
+    if (m.kind !== 'image') return false;
+    if (m.hasAlpha != null) return m.hasAlpha;
+    try {
+      const { loadImage } = await import('../media/library.js');
+      const bmp = await loadImage(m.display || m.path);
+      const c = new OffscreenCanvas(Math.min(256, bmp.width), Math.min(256, bmp.height));
+      const g = c.getContext('2d');
+      g.drawImage(bmp, 0, 0, c.width, c.height);
+      const d = g.getImageData(0, 0, c.width, c.height).data;
+      let clear = 0;
+      for (let i = 3; i < d.length; i += 4) if (d[i] < 250) clear++;
+      m.hasAlpha = clear > d.length / 4 / 100; // more than 1% see-through
+    } catch {
+      m.hasAlpha = false;
+    }
+    return m.hasAlpha;
+  }
+
+  /** Cuts out the clip first when it has no see-through parts yet. False when that was cancelled or failed. */
+  async ensureCutOut(it) {
+    if (await this.hasCutOut(it)) return true;
+    await this.cmd('removeBackground', it);
+    return !!store.project.items[it.id]?.derivations?.includes('bg');
+  }
+
+  /** Turns the subject of a clip into a silhouette, cutting it out first if needed. */
+  async c_silhouette(it = store.primary) {
+    const p = store.project;
+    if (!it || it.type !== 'clip' || !isVisualItem(p, it)) return toast('Select a video or photo clip first.', { timeout: 2500 });
+    if (!(await this.ensureCutOut(it))) return;
+    store.commit('Silhouette', (pp) => {
+      const fx = pp.items[it.id].effects;
+      fx.silhouette = { style: 'fill', color: '#000000', width: 6, ...(fx.silhouette || {}), on: true };
+    });
+    if (store.primary?.id === it.id) this.inspector?.setTab?.('fx');
+    toast('The subject is a silhouette now. Change its colour in Effects.', { timeout: 3000 });
+  }
+
+  /** Puts a soft dark copy of the cut-out subject behind it, so it has a shadow that moves with it. */
+  async c_silhouetteShadow(it = store.primary) {
+    const p = store.project;
+    if (!it || it.type !== 'clip' || !isVisualItem(p, it)) return toast('Select a video or photo clip first.', { timeout: 2500 });
+    if (!(await this.ensureCutOut(it))) return;
+    const { width: W, height: H } = p.settings;
+    let shadowId = null;
+    store.commit('Add a shadow', (pp) => {
+      const src = pp.items[it.id];
+      const c = clone(src);
+      c.id = uid('c');
+      c.muted = true;
+      delete c.linkedTo;
+      delete c.matte;
+      c.blend = 'normal';
+      c.effects.silhouette = { style: 'fill', color: '#000000', width: 6, on: true };
+      c.effects.glow = 0;
+      const dx = Math.round(W * 0.025);
+      const dy = Math.round(H * 0.02);
+      const shift = (k, d) => {
+        if (c.kf?.[k]?.length) c.kf[k] = c.kf[k].map((f) => ({ ...f, v: f.v + d }));
+        else c.props[k] = (c.props[k] || 0) + d;
+      };
+      shift('x', dx);
+      shift('y', dy);
+      if (c.kf) delete c.kf.opacity;
+      c.props.opacity = 0.5 * (src.props.opacity ?? 1);
+      c.props.blur = Math.max(c.props.blur || 0, 0.12);
+      const tr = newTrack('video', `Shadow ${pp.tracks.filter((t) => t.kind === 'video').length + 1}`);
+      pp.tracks.splice(pp.tracks.findIndex((t) => t.id === src.trackId) + 1, 0, tr);
+      c.trackId = tr.id;
+      pp.items[c.id] = c;
+      shadowId = c.id;
+    });
+    toast('Added a shadow on the layer below. Select it to move it, soften it or change its colour.', { timeout: 4000 });
+    return shadowId;
+  }
+
+  /** Shows the nearest clip on a layer above only inside this clip's cut-out. */
+  async c_fillSilhouette(it = store.primary) {
+    const p = store.project;
+    if (!it || it.type !== 'clip' || !isVisualItem(p, it)) return toast('Select the clip with the shape first.', { timeout: 2500 });
+    const tracks = visualTracks(p);
+    const mine = tracks.findIndex((t) => t.id === it.trackId);
+    let above = null;
+    for (let i = mine - 1; i >= 0 && !above; i--) above = trackItems(p, tracks[i].id).find((o) => ['clip', 'solid'].includes(o.type) && o.start < itemEnd(it) && itemEnd(o) > it.start);
+    if (!above) return toast('Put the video you want inside the shape on a layer above this clip, at the same time, then press this again.', { timeout: 5000 });
+    if (!(await this.ensureCutOut(it))) return;
+    store.commit('Fill the shape', (pp) => (pp.items[above.id].matte = 'inside'));
+    toast('The clip above shows only inside this shape now. Give it a blend mode such as Multiply or Screen to mix it with the colour.', { timeout: 5000 });
   }
 
   /** Sets the frame to the shape and size of a video (the selected clip's, or the first on the timeline). */

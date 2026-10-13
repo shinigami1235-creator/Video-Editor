@@ -94,6 +94,8 @@ uniform float u_letterbox;
 uniform bool u_mirror;
 uniform bool u_grade;
 uniform vec4 u_localRect;     // crop region of the full frame covered by this quad
+uniform int u_sil;            // silhouette: 0 off, 1 solid colour, 2 colour with shading, 3 outline only
+uniform vec3 u_silColor; uniform vec2 u_silR; // outline half width in local units
 ${COLOR_FN}
 
 vec2 srcUV(vec2 l) {
@@ -121,6 +123,23 @@ vec4 fetch(vec2 uv) {
 }
 
 float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+
+// how much of a colour survives the green screen key (1 keeps it)
+float keyKeep(vec3 c) {
+  float cb = dot(c, vec3(-0.169, -0.331, 0.5)) - dot(u_chromaColor, vec3(-0.169, -0.331, 0.5));
+  float cr = dot(c, vec3(0.5, -0.419, -0.081)) - dot(u_chromaColor, vec3(0.5, -0.419, -0.081));
+  float d = length(vec2(cb, cr));
+  return smoothstep(u_chromaSim * 0.3, u_chromaSim * 0.3 + u_chromaSmooth * 0.3 + 0.001, d);
+}
+
+#ifdef SIL_OUTLINE
+// the cut-out's alpha at a local point, used to trace the outline
+float alphaAt(vec2 l) {
+  if (l.x < 0.0 || l.y < 0.0 || l.x > 1.0 || l.y > 1.0) return 0.0;
+  vec4 c = fetch(srcUV(l));
+  return u_chroma ? c.a * keyKeep(c.rgb) : c.a;
+}
+#endif
 
 // Moving photo: a source point at depth d (1 near, 0 far) shows at
 // c + (src - c) * (1 + zoom * d) * (1 + margin) + shift * (d - focus).
@@ -192,10 +211,7 @@ void main() {
       col.rgb = clamp(col.rgb + (col.rgb * 4.0 - n) * u_sharpen * 0.6, 0.0, 1.0);
     }
     if (u_chroma) {
-      float cb = dot(col.rgb, vec3(-0.169, -0.331, 0.5)) - dot(u_chromaColor, vec3(-0.169, -0.331, 0.5));
-      float cr = dot(col.rgb, vec3(0.5, -0.419, -0.081)) - dot(u_chromaColor, vec3(0.5, -0.419, -0.081));
-      float d = length(vec2(cb, cr));
-      float k = smoothstep(u_chromaSim * 0.3, u_chromaSim * 0.3 + u_chromaSmooth * 0.3 + 0.001, d);
+      float k = keyKeep(col.rgb);
       col.a *= k;
       // remove the key colour's spill from edges
       float spill = clamp(1.0 - k, 0.0, 1.0) * u_chromaSpill;
@@ -203,6 +219,21 @@ void main() {
       col.rgb = mix(col.rgb, vec3(lum), spill);
     }
     if (u_grade) col.rgb = grade(col.rgb);
+    if (u_sil == 1) col.rgb = u_silColor;
+    else if (u_sil == 2) col.rgb = mix(u_silColor * 0.3, mix(u_silColor, vec3(1.0), 0.35), smoothstep(0.0, 0.85, luma(col.rgb)));
+#ifdef SIL_OUTLINE
+    else if (u_sil == 3) {
+      // a line along the edge of the cut-out: where nearby points disagree about being inside
+      float lo = col.a, hi = col.a;
+      for (int i = 0; i < 16; i++) {
+        float an = float(i) * 0.3927;
+        float s = alphaAt(l + vec2(cos(an), sin(an)) * u_silR);
+        lo = min(lo, s);
+        hi = max(hi, s);
+      }
+      col = vec4(u_silColor, clamp((hi - lo) * 1.5, 0.0, 1.0));
+    }
+#endif
     if (u_vignette != 0.0) {
       float d = length((fl - 0.5) * vec2(1.0, u_res.y / u_res.x));
       col.rgb *= 1.0 - u_vignette * smoothstep(0.25, 0.85, d);
@@ -593,3 +624,8 @@ void main() {
   a *= u_opacity;
   o = vec4(min(rgb, vec3(a)), a);
 }`;
+
+
+// The same layer shader with the outline silhouette compiled in. Kept apart so
+// ordinary layers never pay for the 16 extra samples.
+export const FS_LAYER_OUTLINE = FS_LAYER.replace('precision highp float;', '#define SIL_OUTLINE\nprecision highp float;');
