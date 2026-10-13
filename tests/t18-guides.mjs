@@ -6,7 +6,7 @@ import fs from 'node:fs';
 
 const only = process.argv[2];
 // guides that record from a microphone or run long AI models only get their first steps checked
-const SHALLOW = new Set(['voiceover', 'removebg', 'faces']);
+const SHALLOW = new Set(['voiceover', 'removebg', 'faces', 'fillSubject']);
 
 await startServers();
 try {

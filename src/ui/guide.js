@@ -355,6 +355,30 @@ export const GUIDES = [
     finish: 'The clip zooms toward that spot and back out.',
   },
   {
+    id: 'fillSubject',
+    group: 'Look',
+    title: 'Fill a person or object with another video',
+    video: true,
+    steps: () => {
+      const upper = () => {
+        const p = P();
+        const main = p.tracks.filter((t) => t.kind === 'video').at(-1);
+        return clipsOf('visual').find((c) => c.trackId !== main?.id && clipsOf('visual').some((b) => b.trackId === main?.id && b.start < c.start + c.duration && b.start + b.duration > c.start));
+      };
+      const press = pressStep('Click Fill the subject of the clip below.', () => byText('.inspector button', 'Fill the subject of the clip below'), () => !!modalTitled('Remove background'));
+      return [
+        ...haveClip('visual'),
+        { text: 'Drag a second video onto the empty space above the first one, so it lands on its own layer at the same time.', target: () => q('.m-card'), done: () => !!upper() },
+        { text: 'Click that top clip to select it.', target: () => (upper() ? q(`.tl-clip[data-id="${upper().id}"]`) : null), done: () => !!upper() && store.primary?.id === upper().id },
+        tabStep('Video'),
+        press,
+        { text: 'Pick what should stay in the picture, such as People or Products and objects.', target: () => modalTitled('Remove background')?.querySelector('.modal-body') || null, done: () => !!press._clicked && !modalTitled('Remove background') },
+        waitJob('Wait for the bar at the bottom right to finish. It takes about as long as the clip.', () => !!press._clicked && !modalTitled('Remove background') && !q('.jobs .job')),
+      ];
+    },
+    finish: 'The top clip shows only inside the subject now. Set its Blend mode to Lighten or Screen to mix it with the subject instead of covering it.',
+  },
+  {
     id: 'overlay',
     group: 'Look',
     title: 'Add sparkles, dust or a light leak',

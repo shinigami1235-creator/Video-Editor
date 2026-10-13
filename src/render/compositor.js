@@ -1,7 +1,7 @@
 // WebGL2 compositor shared by the preview and the export. It draws every
 // visible item at time t, bottom track first, into premultiplied layers.
 
-import { VS_QUAD, VS_FULL, FS_LAYER, FS_ADJUST, FS_COPY, FS_BLUR, FS_COMPOSITE, FS_ADD, FS_TRANSITION, FS_REGION, FS_PARTICLES, TRANSITION_TYPES } from './shaders.js';
+import { VS_QUAD, VS_FULL, FS_LAYER, FS_ADJUST, FS_COPY, FS_BLUR, FS_COMPOSITE, FS_ADD, FS_TRANSITION, FS_REGION, FS_PARTICLES, FS_MATTE, TRANSITION_TYPES } from './shaders.js';
 import { visualTracks, trackItems, itemEnd, propAt, animState, sourceTimeUnclamped, previousAdjacent, nextAdjacent } from '../core/model.js';
 import { parseColor, clamp } from '../core/util.js';
 import { rasterText, rasterShape } from './text.js';
@@ -126,6 +126,7 @@ export class Compositor {
       transition: this._program(VS_FULL, FS_TRANSITION),
       region: this._program(VS_FULL, FS_REGION),
       particles: this._program(VS_FULL, FS_PARTICLES),
+      matte: this._program(VS_FULL, FS_MATTE),
     };
     const vbo = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
@@ -868,13 +869,28 @@ export class Compositor {
     plan ||= framePlan(project, t);
     let acc = this._target(rw, rh);
     this._clear(acc);
+    // the last layer drawn, kept so a layer above can use its shape as a matte
+    let below = null;
+    const keepBelow = (L) => {
+      if (below && below !== L) this._release(below);
+      below = L;
+    };
+    const applyMatte = (L, it) => {
+      if (!it.matte || !L) return L;
+      const out = this._target(rw, rh);
+      if (!below) this._clear(out);
+      else this._full(this.progs.matte, { u_src: L.tex, u_shape: below.tex, u_outside: it.matte === 'outside' ? 1 : 0 }, out);
+      return out;
+    };
     for (const op of plan) {
       try {
         if (op.kind === 'layer') {
           const L = this._layerFull(project, op.item, t, provider, ctx);
           if (L) {
-            acc = this._composite(acc, L, op.item.blend);
-            this._release(L);
+            const M = applyMatte(L, op.item);
+            acc = this._composite(acc, M, op.item.blend);
+            if (M !== L) this._release(M);
+            keepBelow(L);
           }
         } else if (op.kind === 'transition') {
           const A = op.a ? this._layerFull(project, op.a, t, provider, ctx) : null;
@@ -895,8 +911,11 @@ export class Compositor {
             { u_a: (A || empty).tex, u_b: (B || empty).tex, u_ab: (ab || empty).tex, u_p: op.p, u_type: type, u_res: [rw, rh] },
             out,
           );
-          acc = this._composite(acc, out, op.b.blend);
-          this._release(A, B, out, empty, ab);
+          const M = applyMatte(out, op.b);
+          acc = this._composite(acc, M, op.b.blend);
+          if (M !== out) this._release(M);
+          this._release(A, B, empty, ab);
+          keepBelow(out);
         } else if (op.kind === 'region') {
           acc = this._region(acc, op.item, t, ctx);
         } else if (op.kind === 'adjust') {
@@ -906,6 +925,7 @@ export class Compositor {
         console.error('render op failed', op, e);
       }
     }
+    if (below) this._release(below);
     const bg = parseColor(project.settings.background || '#000');
     this._bind(null);
     gl.disable(gl.BLEND);

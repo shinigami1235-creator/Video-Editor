@@ -3,7 +3,7 @@
 import { h, icon, iconButton, clear, button, select, keyLabel } from './dom.js';
 import { store } from '../core/store.js';
 import * as E from '../core/edit.js';
-import { newText, newShape, newBlurRegion, newAdjustment, newSolid, itemEnd, trackItems, visualTracks, isVisualItem, sourceTime, projectDuration, cloneItem, CANVAS_PRESETS, keyframeTimes, canvasForMedia, frameShape } from '../core/model.js';
+import { newText, newShape, newBlurRegion, newAdjustment, newSolid, itemEnd, trackItems, visualTracks, isVisualItem, sourceTime, projectDuration, cloneItem, CANVAS_PRESETS, keyframeTimes, canvasForMedia, frameShape, newTrack } from '../core/model.js';
 import { setProp, getProp, localTime } from '../core/props.js';
 import { uid, clone, formatTime } from '../core/util.js';
 import { Timeline, dragSession } from './timeline.js';
@@ -33,7 +33,7 @@ const GUIDE_TITLES = {
 };
 
 // commands that only make sense with a picture; audio projects skip them
-const VIDEO_ONLY = new Set(['addText', 'addShape', 'addBlur', 'addAdjustment', 'addSolid', 'crop', 'freeze', 'splitScreen', 'pip', 'freehandMask', 'depthShot', 'addFx', 'alignFaces', 'upscale', 'aiUpscale', 'removeBackground', 'autoReframe', 'faceBlur', 'stabilize', 'smoothSlowmo', 'syncAngles', 'switchAngles', 'trackMask', 'recordScreen', 'shorts', 'avatar', 'saveTemplate', 'scriptToVideo', 'captions', 'translate', 'chapters', 'detachAudio']);
+const VIDEO_ONLY = new Set(['addText', 'addShape', 'addBlur', 'addAdjustment', 'addSolid', 'crop', 'freeze', 'splitScreen', 'pip', 'freehandMask', 'depthShot', 'addFx', 'alignFaces', 'upscale', 'aiUpscale', 'removeBackground', 'autoReframe', 'faceBlur', 'stabilize', 'smoothSlowmo', 'syncAngles', 'switchAngles', 'trackMask', 'recordScreen', 'shorts', 'avatar', 'saveTemplate', 'scriptToVideo', 'captions', 'translate', 'chapters', 'detachAudio', 'fillSubjectBelow']);
 
 export class App {
   constructor(root) {
@@ -618,6 +618,42 @@ export class App {
       timeout: 12000,
       action: { label: 'Match the video', run: () => this.cmd('matchCanvas', m) },
     });
+  }
+
+  /**
+   * Shows the selected clip only inside the subject of the clip under it.
+   * A copy of the clip below goes on a layer between them and has its
+   * background removed, so the original stays visible around the subject.
+   */
+  async c_fillSubjectBelow(it = store.primary) {
+    const p = store.project;
+    if (!it || !isVisualItem(p, it)) return toast('Select the clip that should fill the subject.', { timeout: 2500 });
+    const tracks = visualTracks(p);
+    const mine = tracks.findIndex((t) => t.id === it.trackId);
+    let below = null;
+    for (let i = mine + 1; i < tracks.length && !below; i++) below = trackItems(p, tracks[i].id).find((o) => o.type === 'clip' && o.start < itemEnd(it) && itemEnd(o) > it.start && ['video', 'image'].includes(p.media[o.mediaId]?.kind));
+    if (!below) return toast('Put this clip on a layer above the clip with the subject, at the same time.', { timeout: 4000 });
+    if (below.derivations?.includes('bg')) {
+      store.commit('Fill the subject', (pp) => (pp.items[it.id].matte = 'inside'));
+      return toast('This clip shows only inside the cut-out below now.', { timeout: 3000 });
+    }
+    let copyId = null;
+    store.commit('Fill the subject', (pp) => {
+      const b = pp.items[below.id];
+      const c = clone(b);
+      c.id = uid('c');
+      c.muted = true; // the original already plays the sound
+      delete c.linkedTo;
+      const tr = newTrack('video', `Video ${pp.tracks.filter((t) => t.kind === 'video').length + 1}`);
+      pp.tracks.splice(pp.tracks.findIndex((t) => t.id === b.trackId), 0, tr);
+      c.trackId = tr.id;
+      pp.items[c.id] = c;
+      pp.items[it.id].matte = 'inside';
+      copyId = c.id;
+    });
+    await this.cmd('removeBackground', store.project.items[copyId]);
+    // the model window was closed or the cut-out failed: take the copy out again
+    if (!store.project.items[copyId]?.derivations?.includes('bg') && store.undoStack.at(-1)?.label === 'Fill the subject') store.undo();
   }
 
   /** Sets the frame to the shape and size of a video (the selected clip's, or the first on the timeline). */

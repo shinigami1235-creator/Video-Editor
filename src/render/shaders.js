@@ -257,6 +257,20 @@ void main() {
   o = vec4(c * a, a);
 }`;
 
+// Keeps a layer only inside (or only outside) the shape of the layer below it,
+// read from that layer's own alpha. Both are premultiplied.
+export const FS_MATTE = `#version 300 es
+precision highp float;
+in vec2 v_uv;
+out vec4 o;
+uniform sampler2D u_src;
+uniform sampler2D u_shape;
+uniform int u_outside;
+void main() {
+  float a = texture(u_shape, v_uv).a;
+  o = texture(u_src, v_uv) * (u_outside == 1 ? 1.0 - a : a);
+}`;
+
 export const FS_COPY = `#version 300 es
 precision highp float;
 in vec2 v_uv;

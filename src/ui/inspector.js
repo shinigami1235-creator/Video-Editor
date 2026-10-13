@@ -342,6 +342,17 @@ export class Inspector {
           (v) => this.set('Blend mode', () => (it.blend = v)),
         ),
       ),
+      section(
+        'Shape from the layer below',
+        select(
+          'Show this',
+          [['', 'Everywhere'], ['inside', 'Only inside the shape below'], ['outside', 'Only outside the shape below']],
+          it.matte || '',
+          (v) => this.set('Shape from the layer below', () => (v ? (it.matte = v) : delete it.matte)),
+        ),
+        h('div', { class: 'hint' }, 'The shape is whatever is cut out on the layer under this one, such as a person, a product or a logo after Remove background.'),
+        button('Fill the subject of the clip below', () => this.app.cmd('fillSubjectBelow', it), { icon: 'person', title: 'Cuts out the subject of the clip below on a copy, then shows this clip only inside it' }),
+      ),
     );
     if (it.type === 'clip' && m) {
       out.append(
