@@ -245,10 +245,10 @@ export const GUIDES = [
     group: 'Sound',
     title: 'Clean up a voice recording',
     steps: () => {
-      const press = pressStep('Click Remove background noise. Level out the voice and Even out loudness are next to it.', () => byText('.inspector button', 'Remove background noise'));
+      const press = pressStep('Click Make the voice clearer. It removes noise, adds clarity, evens the level and sets Instagram loudness in one go.', () => byText('.inspector button', 'Make the voice clearer'));
       return [...selectClip('sound'), tabStep('Audio'), press, waitJob('Wait for the bar at the bottom right to finish.', () => !!press._clicked && !q('.jobs .job'))];
     },
-    finish: 'The clip now plays the cleaned copy. Go back to the original clip in the Smart tools tab to undo it.',
+    finish: 'The clip now plays the cleaned copy. If you only want one part of it, Remove background noise, Level out the voice and Even out loudness are next to that button. Go back to the original clip in the Smart tools tab to undo it.',
   },
 
   // ---- text and captions ----

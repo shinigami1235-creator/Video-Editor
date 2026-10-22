@@ -840,6 +840,7 @@ export class Inspector {
         h(
           'div',
           { class: 'btn-row wrap' },
+          button(it.derivations?.includes('clear') ? 'Voice cleaned up' : 'Make the voice clearer', () => this.app.cmd('clearVoice', it), { icon: 'wand', kind: 'primary', disabled: it.derivations?.includes('clear'), title: 'Removes noise, adds clarity, evens the level and sets Instagram loudness in one step' }),
           button(it.derivations?.includes('denoise') ? 'Noise removed' : 'Remove background noise', () => this.app.cmd('denoise', it), { icon: 'wand', disabled: it.derivations?.includes('denoise') }),
           button('Even out loudness', () => this.app.cmd('normalizeClip', it), { icon: 'audioWave' }),
           button(it.derivations?.includes('comp') ? 'Voice levelled' : 'Level out the voice', () => this.app.cmd('compressClip', it), { icon: 'volume', disabled: it.derivations?.includes('comp'), title: 'Brings quiet words up and loud ones down so the voice stays at one level' }),

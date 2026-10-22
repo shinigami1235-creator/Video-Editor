@@ -43,6 +43,7 @@ export const COMMANDS = {
   denoise: async (app, it) => (await import('./processing.js')).denoiseClip(clipOrSelected(it)),
   normalizeClip: async (app, it) => (await import('./processing.js')).normalizeClip(clipOrSelected(it)),
   compressClip: async (app, it) => (await import('./processing.js')).compressClip(clipOrSelected(it)),
+  clearVoice: async (app, it) => (await import('./processing.js')).clearVoiceClip(clipOrSelected(it)),
   voiceEffect: async (app, it, kind) => (await import('./processing.js')).voiceEffect(clipOrSelected(it), kind),
   faceBlur: async (app, it) => (await import('./faces.js')).faceBlur(clipOrSelected(it)),
   autoReframe: async (app, it) => (await import('./faces.js')).autoReframe(clipOrSelected(it)),

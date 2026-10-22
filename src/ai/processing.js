@@ -183,6 +183,53 @@ export function compressClip(it) {
   return audioDerive(it, 'comp', 'Level out the voice', 'highpass=f=70,acompressor=threshold=0.1:ratio=3:attack=8:release=220:makeup=2,alimiter=limit=0.95');
 }
 
+/**
+ * One click for a phone or lapel voice recording: cuts rumble, removes noise
+ * with RNNoise (a small speech model that runs inside FFmpeg), takes out mud,
+ * adds presence and air, softens harsh "s" sounds, evens the level and sets
+ * the loudness Instagram and TikTok expect. Works from the original sound
+ * rather than the compressed edit copy.
+ */
+export async function clearVoiceClip(it) {
+  const neural = await hasFilter('arnndn');
+  const chain = [
+    'highpass=f=80',
+    neural ? 'arnndn=m=rnnoise-speech.rnnn:mix=0.9' : 'afftdn=nr=18:nf=-30:tn=1',
+    'afftdn=nr=8:nf=-45',
+    'equalizer=f=250:t=q:w=1.2:g=-2.5',
+    'equalizer=f=3500:t=q:w=1:g=3',
+    'highshelf=f=9000:g=2',
+    'deesser=i=0.4',
+    'acompressor=threshold=0.125:ratio=3:attack=6:release=200:makeup=1.5',
+    'loudnorm=I=-16:TP=-1.5:LRA=9',
+    'alimiter=limit=0.95',
+  ].join(',');
+  return deriveForClip(it, {
+    kind: 'clear',
+    label: 'Make the voice clearer',
+    key: hashString(chain),
+    build: async (m, out, dir, job) => {
+      // the model file sits next to the job, so the filter can name it without a Windows path
+      if (neural && !(await exists(join(dir, 'rnnoise-speech.rnnn')))) {
+        const res = await fetch(new URL('models/rnnoise-speech.rnnn', document.baseURI).href);
+        if (!res.ok) throw new Error('The voice model is missing from this copy of the editor.');
+        const { writeBytes } = await import('../backend/index.js');
+        await writeBytes(join(dir, 'rnnoise-speech.rnnn'), new Uint8Array(await res.arrayBuffer()), { offset: 0, truncate: true });
+      }
+      const pcm = m.pcm && (await exists(m.pcm));
+      const args = [];
+      if (m.kind === 'video') args.push('-i', m.edit);
+      if (pcm) args.push('-f', 'f32le', '-ar', '48000', '-ac', '2', '-i', m.pcm);
+      else if (m.kind !== 'video') args.push('-i', m.edit);
+      const audioIn = m.kind === 'video' && pcm ? 1 : 0;
+      if (m.kind === 'video') args.push('-map', '0:v:0', '-map', `${audioIn}:a:0`, '-c:v', 'copy', '-shortest');
+      else args.push('-map', '0:a:0', '-vn');
+      args.push('-af', chain, ...editAudioArgs(runtime.codec), '-movflags', '+faststart', out);
+      return runFfmpegIn(dir, args, m.duration, (f) => job.update(f, 'Cleaning up the voice'), job.signal);
+    },
+  });
+}
+
 export const VOICE_EFFECTS = {
   deeper: 'asetrate=48000*0.84,aresample=48000,atempo=1.190476',
   higher: 'asetrate=48000*1.25,aresample=48000,atempo=0.8',

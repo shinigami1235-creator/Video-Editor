@@ -153,8 +153,16 @@ export class App {
       this.renderPanel();
       setTimeout(() => this.timeline.zoomToFit(), 50);
     });
-    store.on('media', () => {
+    const failShown = new Set();
+    store.on('media', (m) => {
       if (this.panel === 'media' || this.panel === 'audio' || this.panel === 'transcript') this.renderPanelSoon();
+      // say why a file would not open, once, instead of only marking its card Failed
+      if (m?.status === 'processing') failShown.delete(m.id);
+      if (m?.status === 'error' && !failShown.has(m.id)) {
+        failShown.add(m.id);
+        const why = String(m.error || '').split(' | ').pop().replace(/^\S+ stopped with code \d+: /, '').split(m.path + ': ').join('').slice(0, 180);
+        toast(`${m.name} would not open: ${why || 'unknown reason'}. Right-click its card to try again.`, { kind: 'error', timeout: 12000 });
+      }
     });
     store.on('change', () => {
       if (this.panel === 'transcript') this.renderPanelSoon();
@@ -346,6 +354,7 @@ export class App {
         null,
         ['Cut out silences', () => this.cmd('silenceCut')],
         ['Remove filler words', () => this.cmd('fillerCut')],
+        ['Make the voice clearer', () => this.cmd('clearVoice')],
         ['Remove background noise', () => this.cmd('denoise')],
         ['Level out the voice', () => this.cmd('compressClip')],
         ['Even out loudness', () => this.cmd('normalizeClip')],

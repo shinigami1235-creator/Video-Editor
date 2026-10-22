@@ -187,10 +187,9 @@ async function prepareAv(m, info, dir) {
   if (!(await exists(edit))) {
     const args = ['-i', info.src || m.path, '-map', '0:v:0?', '-map', '0:a:0?'];
     if (m.kind === 'video') {
-      const filters = [];
-      if (info.hdr) filters.push(TONEMAP);
-      filters.push(scaleFilter(info, store.settings.editCopyHeight || 1080));
-      filters.push('format=yuv420p');
+      // shrink first, since tone mapping a 4K iPhone HDR clip at full size takes about three times as long
+      const filters = [scaleFilter(info, store.settings.editCopyHeight || 1080)];
+      filters.push(info.hdr ? TONEMAP : 'format=yuv420p');
       args.push('-vf', filters.join(','), '-r', fpsFor(info), '-fps_mode', 'cfr', ...editVideoArgs(codec));
     } else {
       args.push('-vn');

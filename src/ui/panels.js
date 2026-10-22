@@ -440,6 +440,7 @@ function aiPanel(app) {
         tool('Cut out silences', 'Removes the pauses from a recording, the fast way to tighten a talk or a podcast.', 'Cut silences', needClip('audio', (it) => app.cmd('silenceCut', it)), 'split'),
         tool('Remove filler words', 'Cuts "um", "uh" and similar sounds using the transcript.', 'Remove fillers', needClip('audio', (it) => app.cmd('fillerCut', it)), 'wand'),
         tool('Edit by text', 'Read the recording as text and delete words to cut them out.', 'Open', () => app.openPanel('transcript'), 'doc'),
+        tool('Make the voice clearer', 'One step for a phone recording: removes noise, adds clarity, softens harsh "s" sounds and sets Instagram loudness.', 'Clean up', needClip('audio', (it) => app.cmd('clearVoice', it)), 'wand'),
         tool('Remove background noise', 'Cleans hum, hiss and aircon noise from a voice.', 'Clean', needClip('audio', (it) => app.cmd('denoise', it)), 'audioWave'),
         tool('Level out the voice', 'Brings quiet words up and loud ones down, so the voice sits at one steady level.', 'Level out', needClip('audio', (it) => app.cmd('compressClip', it)), 'volume'),
         tool('Even out loudness', 'Sets the clip to podcast loudness (-16 LUFS).', 'Even out', needClip('audio', (it) => app.cmd('normalizeClip', it)), 'audioWave'),
@@ -465,6 +466,7 @@ function aiPanel(app) {
       tool('Cut out silences', 'Removes pauses from a talking clip, the fast way to tighten a lecture.', 'Cut silences', needClip('audio', (it) => app.cmd('silenceCut', it)), 'split'),
       tool('Remove filler words', 'Cuts "um", "uh" and similar sounds using the transcript.', 'Remove fillers', needClip('audio', (it) => app.cmd('fillerCut', it)), 'wand'),
       tool('Script to video', 'Paste a script: the editor reads it with a voice, adds captions and lays your clips or slides under it.', 'Open', () => app.cmd('scriptToVideo'), 'robot'),
+      tool('Make the voice clearer', 'One step for a phone recording: removes noise, adds clarity, softens harsh "s" sounds and sets Instagram loudness.', 'Clean up', needClip('audio', (it) => app.cmd('clearVoice', it)), 'wand'),
       tool('Remove background noise', 'Cleans hum and hiss from a voice recording.', 'Clean audio', needClip('audio', (it) => app.cmd('denoise', it)), 'audioWave'),
     ),
     section(
