@@ -131,7 +131,7 @@ export class Inspector {
     const name = textInput('Name', p.name, null, { onCommit: (v) => this.set('Rename project', () => (p.name = v || 'Untitled project')) });
     const presetVal = CANVAS_PRESETS.find((c) => c.width === s.width && c.height === s.height)?.id || 'custom';
     const presetSel = select(
-      'Canvas',
+      'Frame',
       [['match', 'Match a video on the timeline'], ...CANVAS_PRESETS.map((c) => [c.id, c.name]), ['custom', 'Custom size']],
       presetVal,
       (v) => {

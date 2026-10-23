@@ -76,6 +76,45 @@ try {
   await sleep(300);
   const viaSettings = await page.evaluate(() => ({ ...window.__store.project.settings }));
   check('Project settings can match a video', viaSettings.width === e2[0] && viaSettings.height === e2[1], `${viaSettings.width}x${viaSettings.height}`);
+  // the Frame menu under the preview
+  const menu = await page.evaluate(() => {
+    const sel = document.querySelector('.viewer .frame-sel');
+    return sel ? { value: sel.value, text: sel.options[sel.selectedIndex].textContent, visible: sel.offsetParent !== null } : null;
+  });
+  check('the Frame menu under the preview shows the matched shape', menu?.visible && menu.value === 'match' && /same as the video \(16:9\)/.test(menu.text), JSON.stringify(menu));
+  await page.selectOption('.viewer .frame-sel', 'feed45');
+  await sleep(200);
+  const feed = await page.evaluate(() => ({ ...window.__store.project.settings }));
+  check('picking 4:5 in the Frame menu sets 1080 x 1350', feed.width === 1080 && feed.height === 1350, `${feed.width}x${feed.height}`);
+
+  // Export warns about black bars and fixes it in one click
+  await page.evaluate(() => document.querySelectorAll('.toast').forEach((t) => t.remove()));
+  await page.click('.export-btn');
+  await page.waitForSelector('.modal .export-opts');
+  const warn = await page.evaluate(() => document.querySelector('.modal .notice')?.textContent || '');
+  check('Export warns when the video would get black bars', /The frame is 4:5 and landscape\.mp4 is 16:9/.test(warn), warn);
+  await page.locator('.modal .notice button').click();
+  await page.waitForSelector('.modal .export-opts');
+  await sleep(200);
+  const fixed = await page.evaluate(() => ({ s: { ...window.__store.project.settings }, notice: !!document.querySelector('.modal .notice'), modals: document.querySelectorAll('.modal').length }));
+  check('the warning button matches the frame and reopens Export', fixed.s.width === e2[0] && fixed.s.height === e2[1] && !fixed.notice && fixed.modals === 1, JSON.stringify(fixed));
+  await page.keyboard.press('Escape');
+
+  // a new project starts on Match my video even after picking another shape
+  await page.evaluate(async () => (await import('/src/project-io.js')).createProject({ name: 'Empty' }));
+  await page.evaluate(() => window.__app.cmd('newProject'));
+  await page.waitForSelector('.welcome-modal .preset-card');
+  await page.locator('.welcome-modal .preset-card', { hasText: 'Reels' }).first().click();
+  await page.locator('.welcome-modal .modal-foot button', { hasText: 'Create project' }).click();
+  await sleep(200);
+  await page.evaluate(() => window.__app.cmd('newProject'));
+  await page.waitForSelector('.welcome-modal .preset-card');
+  const again = await page.evaluate(() => document.querySelector('.welcome-modal .preset-card.active .pc-name')?.textContent);
+  check('the start screen goes back to Match my video', again === 'Match my video', again);
+  await page.keyboard.press('Escape');
+  const plain = await page.evaluate(async () => (await import('/src/core/model.js')).newProject().settings);
+  check('a project made without a size waits for the first video', plain.matchFirst === true, JSON.stringify(plain));
+
   await page.screenshot({ path: '/tmp/ve-canvas.png' });
 
   const errs = logs.filter((l) => /\[error\]|pageerror/i.test(l) && !/404|Failed to load resource/.test(l));

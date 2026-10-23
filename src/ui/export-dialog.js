@@ -3,7 +3,7 @@
 import { h, button, select, toggle, slider, clear, icon } from './dom.js';
 import { modal, toast, errorToast } from './notify.js';
 import { store } from '../core/store.js';
-import { projectDuration, itemEnd } from '../core/model.js';
+import { projectDuration, itemEnd, isVisualItem, frameShape } from '../core/model.js';
 import { EXPORT_PRESETS, sizeOptions, exportVideo, exportGif, exportAudio, exportFrame, exportCaptions, defaultExportName } from '../export/export.js';
 import { saveDialog, join, paths, invoke, dirname } from '../backend/index.js';
 import { saveSettings } from '../core/settings.js';
@@ -40,6 +40,11 @@ export function showExport(app) {
   const aspect = p.settings.width / p.settings.height;
   const matching = EXPORT_PRESETS.filter((x) => Math.abs(x.aspect - aspect) < 0.02);
 
+  // the first video on the timeline, when its shape differs from the frame
+  const firstClip = Object.values(p.items).filter((it) => it.type === 'clip' && p.media[it.mediaId]?.kind === 'video' && isVisualItem(p, it)).sort((a, b) => a.start - b.start)[0];
+  const firstMedia = firstClip && p.media[firstClip.mediaId];
+  const offShape = firstMedia?.width && Math.abs(firstMedia.width / firstMedia.height / aspect - 1) > 0.03 && Math.abs((firstClip.props?.scale ?? 1) - 1) < 0.01 && firstClip.fit !== 'cover';
+
   function draw() {
     clear(opts);
     const fmts = h('div', { class: 'seg wide' });
@@ -60,6 +65,20 @@ export function showExport(app) {
         draw();
       } }, l));
     opts.append(fmts);
+    if (format === 'mp4' && offShape) {
+      opts.append(
+        h(
+          'div',
+          { class: 'notice col' },
+          h('p', {}, `The frame is ${frameShape(p.settings.width, p.settings.height)} and ${firstMedia.name} is ${frameShape(firstMedia.width, firstMedia.height)}, so the video comes out with black bars around it.`),
+          button(`Export it as ${frameShape(firstMedia.width, firstMedia.height)} instead`, () => {
+            m.close();
+            app.cmd('matchCanvas', firstMedia);
+            showExport(app);
+          }, { kind: 'primary' }),
+        ),
+      );
+    }
     if (format === 'mp4') {
       if (matching.length) {
         const cards = h('div', { class: 'chips' });

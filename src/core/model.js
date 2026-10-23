@@ -34,7 +34,11 @@ export function frameShape(w, h) {
   return hit ? hit[0] : `${w} x ${h}`;
 }
 
-export function newProject({ name = 'Untitled project', width = 1080, height = 1920, fps = 30, audioOnly = false, matchFirst = false } = {}) {
+// With no size given, a video project takes the shape of the first video put on it.
+export function newProject({ name = 'Untitled project', width, height, fps = 30, audioOnly = false, matchFirst } = {}) {
+  matchFirst ??= width == null && height == null;
+  width ??= 1920;
+  height ??= 1080;
   const v1 = newTrack('video', 'Video 1');
   const a1 = newTrack('audio', 'Audio 1');
   const tracks = [v1, a1];

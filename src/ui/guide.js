@@ -121,8 +121,7 @@ export const GUIDES = [
     video: true,
     steps: () => [
       ...haveClip('video'),
-      { text: 'Click an empty part of the timeline so nothing is selected.', target: () => q('.tl-scroll'), done: () => !store.primary },
-      { text: 'Under Canvas on the right, pick Match a video on the timeline.', target: () => [...document.querySelectorAll('.inspector select')].find((el) => shown(el) && [...el.options].some((o) => o.value === 'match')) || null, goal: (did) => did('Match the video') },
+      { text: 'Click Frame under the preview, next to the time, and pick Frame: match the video.', target: () => q('.viewer .frame-sel'), goal: (did) => did('Match the video') || (q('.viewer .frame-sel')?.value === 'match' && !store.project.settings.matchFirst) },
     ],
     finish: 'The frame has the same shape as the video now. Exports come out that shape too.',
   },

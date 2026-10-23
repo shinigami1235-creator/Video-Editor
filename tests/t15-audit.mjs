@@ -149,6 +149,9 @@ try {
   };
   const restore = async () => {
     const t0 = Date.now();
+    // jobs the last click started (noise removal, pitch) are cancelled so they don't redraw the next test
+    await page.evaluate(() => document.querySelectorAll('.job .job-x').forEach((b) => b.click()));
+    await page.waitForFunction(() => !document.querySelector('.jobs .job'), null, { timeout: 15000 }).catch(() => {});
     await page.evaluate(() => {
       const s = window.__store;
       window.__app.preview?.pause?.();

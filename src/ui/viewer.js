@@ -7,7 +7,7 @@ import { Preview } from '../render/preview.js';
 import { AudioView } from './audio-view.js';
 import { formatTime, clamp } from '../core/util.js';
 import { itemBox, setProp, getProp } from '../core/props.js';
-import { activeVisualItems, itemEnd, isVisualItem, projectDuration, propAt } from '../core/model.js';
+import { activeVisualItems, itemEnd, isVisualItem, projectDuration, propAt, CANVAS_PRESETS, frameShape, canvasForMedia } from '../core/model.js';
 
 export class Viewer {
   constructor(root, app) {
@@ -22,7 +22,10 @@ export class Viewer {
     this.audioView = new AudioView(this);
     this.stage.append(this.audioView.root);
     this.applyMode();
-    store.on('change', () => this.applyMode());
+    store.on('change', () => {
+      this.applyMode();
+      this.syncFrame();
+    });
     store.on('change', () => {
       this.preview.invalidate();
       this.fit();
@@ -42,6 +45,7 @@ export class Viewer {
     store.on('project', () => {
       this.preview.dropAll();
       this.applyMode();
+      this.syncFrame();
       this.fit();
     });
     new ResizeObserver(() => this.fit()).observe(this.stage);
@@ -65,6 +69,18 @@ export class Viewer {
       this.preview.invalidate();
       this.app.saveSetting('previewQuality', this.qualitySel.value);
     });
+    // the frame shape sits in plain sight, since a wrong shape means black bars in every export
+    this.frameSel = h('select', { class: 'mini frame-sel', title: 'Frame shape' });
+    this.frameSel.addEventListener('change', () => {
+      const v = this.frameSel.value;
+      if (v === 'match') return this.app.cmd('matchCanvas');
+      const c = CANVAS_PRESETS.find((x) => x.id === v);
+      if (c)
+        store.commit('Frame shape', (pp) => {
+          Object.assign(pp.settings, { width: c.width, height: c.height });
+          delete pp.settings.matchFirst;
+        });
+    });
     this.loopBtn = iconButton('loop', () => {
       this.preview.loop = !this.preview.loop;
       this.loopBtn.classList.toggle('active', this.preview.loop);
@@ -79,7 +95,7 @@ export class Viewer {
     const transport = h(
       'div',
       { class: 'transport' },
-      h('div', { class: 'transport-left' }, this.timeEl, h('span', { class: 'dim' }, ' / '), this.durEl),
+      h('div', { class: 'transport-left' }, this.timeEl, h('span', { class: 'dim' }, ' / '), this.durEl, this.frameSel),
       h(
         'div',
         { class: 'transport-mid' },
@@ -93,13 +109,36 @@ export class Viewer {
       ),
       h('div', { class: 'transport-right' }, this.loopBtn, this.safeBtn, h('span', { class: 'icon-wrap', title: 'Preview volume' }, icon('volume', 16)), vol, this.qualitySel, (this.fullBtn = iconButton('expand', () => this.fullscreen(), 'Full screen preview'))),
     );
-    for (const el of [this.safeBtn, this.qualitySel, this.fullBtn]) el.classList.add('video-only');
+    for (const el of [this.safeBtn, this.qualitySel, this.fullBtn, this.frameSel]) el.classList.add('video-only');
+    this.syncFrame();
     r.append(this.stage, transport);
     this.overlay.addEventListener('pointerdown', (e) => this.onDown(e));
     this.overlay.addEventListener('dblclick', (e) => {
       const it = this.selectedVisual();
       if (it?.type === 'text') this.app.editTextInline?.(it);
     });
+  }
+
+  /** Shows the current frame shape in the Frame menu. */
+  syncFrame() {
+    const st = store.project?.settings;
+    if (!st || !this.frameSel) return;
+    const p = store.project;
+    const first = Object.values(p.items).filter((it) => it.type === 'clip' && p.media[it.mediaId]?.kind === 'video' && isVisualItem(p, it)).sort((a, b) => a.start - b.start)[0];
+    const fm = first && p.media[first.mediaId];
+    const fc = fm?.width ? canvasForMedia(fm) : null;
+    const same = fc && fc.width === st.width && fc.height === st.height;
+    const cur = st.matchFirst || same ? 'match' : CANVAS_PRESETS.find((c) => c.width === st.width && c.height === st.height)?.id || 'custom';
+    const key = `${cur}|${st.width}x${st.height}|${!!st.matchFirst}`;
+    if (this._frameKey === key) return;
+    this._frameKey = key;
+    clear(this.frameSel);
+    const opt = (v, l) => h('option', { value: v, selected: v === cur }, l);
+    this.frameSel.append(
+      opt('match', st.matchFirst ? 'Frame: same as the first video' : same ? `Frame: same as the video (${frameShape(st.width, st.height)})` : 'Frame: match the video'),
+      ...CANVAS_PRESETS.map((c) => opt(c.id, 'Frame: ' + c.name)),
+    );
+    if (cur === 'custom') this.frameSel.append(opt('custom', `Frame: ${frameShape(st.width, st.height)} (${st.width} x ${st.height})`));
   }
 
   /** Audio projects show the sound wave and meters instead of the picture. */

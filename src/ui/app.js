@@ -768,7 +768,10 @@ export class App {
       const first = Object.values(p.items).filter((it) => it.type === 'clip' && isVisualItem(p, it) && p.media[it.mediaId]?.kind === 'video').sort((a, b) => a.start - b.start)[0];
       m = sel?.kind === 'video' ? sel : first ? p.media[first.mediaId] : null;
     }
-    if (!m?.width) return toast('Put a video on the timeline first.', { timeout: 2500 });
+    if (!m?.width) {
+      store.commit('Match the video', (pp) => (pp.settings.matchFirst = true));
+      return toast('The frame takes the shape of the first video you add.', { timeout: 3000 });
+    }
     const c = canvasForMedia(m);
     store.commit('Match the video', (pp) => {
       Object.assign(pp.settings, c);

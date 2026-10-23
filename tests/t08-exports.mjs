@@ -105,7 +105,8 @@ try {
     await X.exportCaptions(s.project, '/tmp/ve-test/caps.vtt');
     return true;
   });
-  check('png frame', fs.existsSync('/tmp/ve-test/frame.png') && probe('/tmp/ve-test/frame.png').streams[0].width === 1080);
+  const frameW = await page.evaluate(() => window.__store.project.settings.width);
+  check('png frame', fs.existsSync('/tmp/ve-test/frame.png') && probe('/tmp/ve-test/frame.png').streams[0].width === frameW, String(frameW));
   check('jpg frame', fs.existsSync('/tmp/ve-test/frame.jpg'));
   check('mp3 audio', probe('/tmp/ve-test/mix.mp3').streams[0].codec_name === 'mp3');
   check('gif', probe('/tmp/ve-test/clip.gif').streams[0].codec_name === 'gif');

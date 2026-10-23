@@ -53,7 +53,8 @@ function setMedia(id, patch) {
   if (!m) return;
   Object.assign(m, patch);
   store.emit('media', m);
-  store.touch();
+  // a progress tick only redraws the media cards, so the inspector does not rebuild under the mouse many times a second
+  if (Object.keys(patch).some((k) => k !== 'progress')) store.touch();
 }
 
 /** Adds files to the project library and starts processing them. Returns the media entries. */

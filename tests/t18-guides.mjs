@@ -161,6 +161,7 @@ try {
     if (/Export and choose where|click Export and choose/i.test(txt)) await page.evaluate(() => window.__testDialogs.push('/tmp/ve-guide-export.' + (window.__store.project.settings.audioOnly ? 'mp3' : 'mp4')));
     if (/Stitch videos, then pick|Join audio files, then pick/.test(txt)) await page.evaluate((f) => window.__testDialogs.push([f + '/talk.mp4', f + '/landscape.mp4']), FIX);
     if (/save icon/.test(txt)) await page.evaluate(() => window.__testDialogs.push('/tmp/ve-guide-save.vproj'));
+    if (process.env.GUIDE_LOG) console.log('    hit', await page.evaluate(([x, y]) => { const e = document.elementFromPoint(x, y); return e?.tagName + '.' + (e?.className?.baseVal ?? e?.className); }, [s.rect.x, s.rect.y]));
     return page.mouse.click(s.rect.x, s.rect.y);
   };
 

@@ -12,8 +12,8 @@ export async function showWelcome(app, { newOnly = false } = {}) {
   // "Match my video" takes the shape of the first video put on the timeline
   const MATCH = { id: 'match', name: 'Match my video', width: 1920, height: 1080, match: true };
   const PRESETS = [MATCH, ...CANVAS_PRESETS];
-  // Match my video is picked until a shape is chosen on this version of the start screen
-  let preset = (store.settings.presetPicked && PRESETS.find((c) => c.id === store.settings.lastPreset)) || MATCH;
+  // every new project starts on Match my video; another shape is a choice for that project only
+  let preset = MATCH;
   let fps = 30;
   const name = h('input', { type: 'text', value: 'Untitled project', class: 'big-input' });
   const grid = h('div', { class: 'preset-cards' });
