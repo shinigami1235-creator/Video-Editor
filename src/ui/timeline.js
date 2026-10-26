@@ -1,7 +1,7 @@
 // The timeline: tracks, clips, ruler, playhead, trimming, moving, snapping,
 // keyframes, transitions between clips, and drops from the media panel.
 
-import { h, icon, iconButton, clear } from './dom.js';
+import { h, icon, iconButton, clear, slider, button } from './dom.js';
 import { store } from '../core/store.js';
 import { itemEnd, sourceTime, keyframeTimes, trackItems, visualTracks, projectDuration, maxClipDuration, propAt, setKeyframe } from '../core/model.js';
 import * as E from '../core/edit.js';
@@ -9,8 +9,10 @@ import { formatTime, clamp, throttle } from '../core/util.js';
 import { fileUrl } from '../backend/index.js';
 import { getPeaks, peaksSync } from '../media/library.js';
 import { TRANSITION_TYPES } from '../render/shaders.js';
+import { multicamOf, angleSpans, addSwitch, setSoundAngle, SWITCH_TYPES, ANGLE_COLORS } from '../core/multicam.js';
 
 const HEAD_W = 190;
+const LANE_H = 46;
 const RULER_H = 28;
 const HANDLE = 7;
 const VOL_MAX = 3;
@@ -181,9 +183,17 @@ export class Timeline {
     const main = E.spineTrack(p);
     let y = 0;
     const seen = new Set();
+    // multi-angle: the Angles row sits right above the angle tracks
+    const mc = p.settings.audioOnly ? null : multicamOf(p);
+    const angleOfTrack = new Map(mc ? mc.angles.map((id, i) => [p.items[id].trackId, i]) : []);
+    let laneDone = false;
     for (const tr of order) {
+      if (mc && !laneDone && angleOfTrack.has(tr.id)) {
+        laneDone = true;
+        y = this._angleLane(mc, y);
+      }
       const hgt = tr.height || 60;
-      const head = this._head(tr, tr === main);
+      const head = this._head(tr, tr === main, angleOfTrack.get(tr.id));
       head.style.height = hgt + 'px';
       this.heads.append(head);
       let row = existingRows.get(tr.id);
@@ -203,6 +213,13 @@ export class Timeline {
       }
     }
     for (const [id, row] of existingRows) if (!this.rows.has(id)) row.remove();
+    if (!laneDone && this.angleLane) {
+      this.angleLane.remove();
+      this.angleLane = null;
+      this.closeAnglePop();
+    }
+    this.tracksEl.querySelectorAll('.tl-angle-off').forEach((el) => el.remove());
+    if (mc) this._angleShade(mc);
     for (const [id, el] of this.els) {
       if (!seen.has(id)) {
         el.remove();
@@ -230,9 +247,10 @@ export class Timeline {
     this.drawVisibleCanvases();
   }
 
-  _head(tr, isMain) {
+  _head(tr, isMain, angle) {
     const p = store.project;
     const name = h('span', { class: 'tl-head-name', title: 'Double-click to rename' }, tr.name + (isMain ? ' (main)' : ''));
+
     name.addEventListener('dblclick', async () => {
       const { promptDialog } = await import('./notify.js');
       const v = await promptDialog('Rename track', 'Track name', tr.name);
@@ -249,8 +267,275 @@ export class Timeline {
     btns.append(iconButton(tr.locked ? 'lock' : 'unlock', () => store.commit(tr.locked ? 'Unlock track' : 'Lock track', () => (tr.locked = !tr.locked)), tr.locked ? 'Unlock track' : 'Lock track', { size: 15, active: tr.locked }));
     const canRemove = p.tracks.filter((t) => t.kind === tr.kind).length > 1 && !isMain;
     if (canRemove) btns.append(iconButton('x', () => store.commit('Delete track', (pp) => E.removeTrack(pp, tr.id)), 'Delete track and its clips', { size: 14 }));
-    const head = h('div', { class: `tl-head kind-${tr.kind}` }, h('span', { class: 'tl-head-icon' }, icon(tr.kind === 'video' ? 'film' : 'music', 14)), name, btns);
+    // an angle track shows its angle number where the film icon would be
+    const lead = angle != null ? h('b', { class: 'tl-angle-num', title: `Angle ${angle + 1}`, style: { background: ANGLE_COLORS[angle % ANGLE_COLORS.length] } }, String(angle + 1)) : h('span', { class: 'tl-head-icon' }, icon(tr.kind === 'video' ? 'film' : 'music', 14));
+    const head = h('div', { class: `tl-head kind-${tr.kind}` }, lead, name, btns);
     return head;
+  }
+
+  // ---- multi-angle row ------------------------------------------------------------
+
+  /** The Angles row: which angle is on screen when, and the switches between them. */
+  _angleLane(mc, y) {
+    const p = store.project;
+    const z = store.zoom;
+    const head = h(
+      'div',
+      { class: 'tl-head tl-angle-head', style: { height: LANE_H + 'px' } },
+      h('span', { class: 'tl-head-icon' }, icon('cameras', 14)),
+      h('span', { class: 'tl-head-name' }, 'Angles'),
+      h('div', { class: 'tl-head-btns' }, iconButton('settings', (e) => this.openAnglePop({ settings: true }, e.currentTarget), 'Sound and the transition new switches get', { size: 15 })),
+    );
+    this.heads.append(head);
+    let lane = this.angleLane;
+    if (!lane) {
+      lane = this.angleLane = h('div', { class: 'tl-angle-lane' });
+      lane.addEventListener('pointerdown', (e) => this._laneDown(e));
+    }
+    clear(lane);
+    lane.style.top = y + 'px';
+    lane.style.height = LANE_H + 'px';
+    const end = Math.max(...mc.angles.map((id) => itemEnd(p.items[id])));
+    const nameOf = (a) => {
+      const it = p.items[mc.angles[a]];
+      return (it?.name || p.media[it?.mediaId]?.name || 'Angle').replace(/\.[^.]+$/, '');
+    };
+    for (const [t0, t1, a] of angleSpans(p, mc, end)) {
+      const col = ANGLE_COLORS[a % ANGLE_COLORS.length];
+      const seg = h('div', { class: 'tl-angle-seg', style: { left: t0 * z + 'px', width: Math.max(1, (t1 - t0) * z) + 'px', background: col + '33', borderColor: col }, title: `Angle ${a + 1}: ${nameOf(a)}. Click to change.` }, h('b', { style: { background: col } }, String(a + 1)), h('span', {}, nameOf(a)));
+      seg.dataset.t0 = t0;
+      lane.append(seg);
+    }
+    for (const sw of mc.switches) {
+      const d = sw.type === 'cut' ? 0 : sw.d ?? 0.6;
+      const w = Math.max(12, d * z);
+      const prev = mc.switches.filter((x) => x.t < sw.t).pop()?.a ?? 0;
+      const ca = ANGLE_COLORS[prev % ANGLE_COLORS.length];
+      const cb = ANGLE_COLORS[sw.a % ANGLE_COLORS.length];
+      const label = SWITCH_TYPES.find(([k]) => k === sw.type)?.[1] || 'Fade';
+      const el = h(
+        'div',
+        {
+          class: 'tl-angle-sw' + (sw.type === 'cut' ? ' cut' : '') + (this.selSwitch === sw.id ? ' sel' : ''),
+          style: { left: sw.t * z - w / 2 + 'px', width: w + 'px', background: sw.type === 'cut' ? '' : `linear-gradient(90deg, ${ca}, ${cb})` },
+          title: `${label}${d ? ' ' + d.toFixed(1) + ' s' : ''} into angle ${sw.a + 1} at ${formatTime(sw.t)}. Drag to move, click to change.`,
+        },
+        h('span', {}, sw.type === 'cut' ? '' : label),
+      );
+      el.dataset.sw = sw.id;
+      lane.append(el);
+    }
+    if (!mc.switches.length) lane.append(h('div', { class: 'tl-angle-hint' }, `Play it and press ${mc.angles.map((_, i) => i + 1).join(', ')} to switch angles here`));
+    if (lane.parentNode !== this.tracksEl) this.tracksEl.append(lane);
+    return y + LANE_H;
+  }
+
+  /** Darkens each angle's clip where another angle is on screen. */
+  _angleShade(mc) {
+    const p = store.project;
+    const z = store.zoom;
+    const end = Math.max(...mc.angles.map((id) => itemEnd(p.items[id])));
+    const spans = angleSpans(p, mc, end);
+    mc.angles.forEach((id, a) => {
+      const it = p.items[id];
+      const row = this.rows.get(it.trackId);
+      if (!row) return;
+      let t = it.start;
+      const stop = itemEnd(it);
+      for (const [t0, t1, sa] of spans) {
+        if (sa !== a) continue;
+        if (t0 > t) row.append(h('div', { class: 'tl-angle-off', style: { left: t * z + 'px', width: (Math.min(t0, stop) - t) * z + 'px' } }));
+        t = Math.max(t, t1);
+      }
+      if (stop > t) row.append(h('div', { class: 'tl-angle-off', style: { left: t * z + 'px', width: (stop - t) * z + 'px' } }));
+    });
+  }
+
+  _laneDown(e) {
+    if (e.button !== 0) return;
+    e.stopPropagation();
+    const p = store.project;
+    const swEl = e.target.closest('.tl-angle-sw');
+    if (swEl) {
+      const id = swEl.dataset.sw;
+      this.selSwitch = id;
+      const sw = p.multicam.switches.find((s) => s.id === id);
+      if (!sw) return;
+      const x0 = e.clientX;
+      const t0 = sw.t;
+      let moved = false;
+      const onMove = (ev) => {
+        const dt = (ev.clientX - x0) / store.zoom;
+        if (!moved && Math.abs(ev.clientX - x0) < 4) return;
+        if (!moved) store.beginGesture();
+        moved = true;
+        store.mutate((pp) => {
+          const s = pp.multicam.switches.find((x) => x.id === id);
+          if (s) s.t = Math.max(0, this._snap(t0 + dt, new Set()).t);
+          pp.multicam.switches.sort((a, b) => a.t - b.t);
+        });
+      };
+      const onUp = () => {
+        window.removeEventListener('pointermove', onMove);
+        window.removeEventListener('pointerup', onUp);
+        if (moved) store.endGesture('Move angle switch');
+        else this.openAnglePop({ sw: id }, swEl);
+        this.render();
+      };
+      window.addEventListener('pointermove', onMove);
+      window.addEventListener('pointerup', onUp);
+      return;
+    }
+    const t = this.timeAt(e.clientX);
+    this.app.seek(t);
+    this.selSwitch = null;
+    const seg = e.target.closest('.tl-angle-seg');
+    if (seg) this.openAnglePop({ segAt: Number(seg.dataset.t0) }, seg, e.clientX);
+  }
+
+  /** Removes a switch. True when there was one. */
+  removeSwitch(id) {
+    const mc = store.project.multicam;
+    if (!mc?.switches?.some((s) => s.id === id)) return false;
+    store.commit('Remove angle switch', (pp) => (pp.multicam.switches = pp.multicam.switches.filter((s) => s.id !== id)));
+    this.selSwitch = null;
+    this.closeAnglePop();
+    return true;
+  }
+
+  closeAnglePop() {
+    this.anglePop?.remove();
+    this.anglePop = null;
+    document.removeEventListener('pointerdown', this._popAway, true);
+  }
+
+  /** Small panel for a switch, a stretch of the Angles row, or the row's settings. */
+  openAnglePop(what, anchor, clientX = null) {
+    this.closeAnglePop();
+    const p = store.project;
+    const mc = multicamOf(p);
+    if (!mc) return;
+    const pop = h('div', { class: 'tl-pop' });
+    const nameOf = (a) => {
+      const it = p.items[mc.angles[a]];
+      return (it?.name || p.media[it?.mediaId]?.name || 'Angle').replace(/\.[^.]+$/, '');
+    };
+    const angleBtns = (cur, onPick) =>
+      h(
+        'div',
+        { class: 'tl-pop-angles' },
+        ...mc.angles.map((_, a) => {
+          const b = h('button', { class: 'chip' + (a === cur ? ' active' : ''), type: 'button', onclick: () => onPick(a) }, h('b', { style: { background: ANGLE_COLORS[a % ANGLE_COLORS.length] } }, String(a + 1)), ' ', nameOf(a));
+          return b;
+        }),
+      );
+    const typeChips = (cur, onPick) => h('div', { class: 'chips tl-pop-types' }, ...SWITCH_TYPES.map(([k, l]) => h('button', { class: 'chip' + (k === cur ? ' active' : ''), type: 'button', onclick: () => onPick(k) }, l)));
+    const durSlider = (val, onInput, onCommit) =>
+      slider('Length', { value: val, min: 0.1, max: 3, step: 0.1, format: (v) => Number(v).toFixed(1) + ' s', onInput, onCommit });
+    const reopen = () => this.openAnglePop(what, anchor, clientX);
+
+    if (what.settings) {
+      const soundIdx = Math.max(0, mc.angles.indexOf(mc.sound));
+      pop.append(
+        h('h4', {}, 'Sound for the whole video'),
+        angleBtns(soundIdx, (a) => {
+          store.commit('Sound from angle ' + (a + 1), (pp) => setSoundAngle(pp, mc.angles[a]));
+          reopen();
+        }),
+        h('h4', {}, 'New switches use'),
+        typeChips(mc.defType || 'dissolve', (k) => {
+          store.commit('Default angle transition', (pp) => (pp.multicam.defType = k));
+          reopen();
+        }),
+        (mc.defType || 'dissolve') !== 'cut'
+          ? durSlider(
+              mc.defDur ?? 0.6,
+              (v) => {
+                store.beginGesture();
+                store.mutate((pp) => (pp.multicam.defDur = v));
+              },
+              () => store.endGesture('Default transition length'),
+            )
+          : null,
+        h('div', { class: 'btn-row' }, button('Stop editing angles', () => {
+          this.closeAnglePop();
+          this.app.cmd('stopAngles');
+        }, { kind: 'link' })),
+      );
+    } else {
+      // a switch, or the stretch of the row that was clicked (its switch, if it has one)
+      let sw = what.sw ? mc.switches.find((s) => s.id === what.sw) : mc.switches.find((s) => Math.abs(s.t - what.segAt) < 1e-6);
+      const shownIdx = sw ? sw.a : 0;
+      pop.append(
+        h('h4', {}, sw ? `From ${formatTime(sw.t)} show` : 'At the start show'),
+        angleBtns(shownIdx, (a) => {
+          store.commit('Change angle', (pp) => {
+            const s = sw && pp.multicam.switches.find((x) => x.id === sw.id);
+            if (s) s.a = a;
+            else {
+              const n = addSwitch(pp, what.segAt, a);
+              n.type = 'cut';
+              what = { sw: n.id, _rect: what._rect };
+            }
+          });
+          reopen();
+        }),
+      );
+      if (sw) {
+        pop.append(
+          h('h4', {}, 'Transition into it'),
+          typeChips(sw.type, (k) => {
+            store.commit('Angle transition', (pp) => {
+              const s = pp.multicam.switches.find((x) => x.id === sw.id);
+              if (s) {
+                s.type = k;
+                pp.multicam.defType = k;
+              }
+            });
+            reopen();
+          }),
+          sw.type !== 'cut'
+            ? durSlider(
+                sw.d ?? 0.6,
+                (v) => {
+                  store.beginGesture();
+                  store.mutate((pp) => {
+                    const s = pp.multicam.switches.find((x) => x.id === sw.id);
+                    if (s) s.d = v;
+                    pp.multicam.defDur = v;
+                  });
+                },
+                () => store.endGesture('Transition length'),
+              )
+            : null,
+          h(
+            'div',
+            { class: 'btn-row' },
+            button('Preview it', () => {
+              this.closeAnglePop();
+              this.app.seek(Math.max(0, sw.t - 2));
+              this.app.preview?.play();
+            }, { icon: 'play' }),
+            button('Remove switch', () => this.removeSwitch(sw.id), { icon: 'trash', kind: 'link' }),
+          ),
+        );
+      }
+    }
+    document.body.append(pop);
+    // the row redraws after every change, so a reopened panel keeps the first anchor's place
+    const r = what._rect || anchor.getBoundingClientRect();
+    what._rect = { left: r.left, top: r.top, width: r.width, bottom: r.bottom };
+    const pw = pop.offsetWidth;
+    const ph = pop.offsetHeight;
+    const x = clamp((clientX ?? r.left + r.width / 2) - pw / 2, 8, innerWidth - pw - 8);
+    const yy = r.top - ph - 8 > 8 ? r.top - ph - 8 : Math.min(innerHeight - ph - 8, r.bottom + 8);
+    pop.style.left = x + 'px';
+    pop.style.top = yy + 'px';
+    this.anglePop = pop;
+    this._popAway = (ev) => {
+      if (!pop.contains(ev.target) && !ev.target.closest?.('.tl-angle-lane, .tl-angle-head')) this.closeAnglePop();
+    };
+    document.addEventListener('pointerdown', this._popAway, true);
   }
 
   _clip(it, row, hgt, tr) {

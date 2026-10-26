@@ -4,6 +4,7 @@
 import { VS_QUAD, VS_FULL, FS_LAYER, FS_LAYER_OUTLINE, FS_ADJUST, FS_COPY, FS_BLUR, FS_COMPOSITE, FS_ADD, FS_TRANSITION, FS_REGION, FS_PARTICLES, FS_MATTE, TRANSITION_TYPES } from './shaders.js';
 import { visualTracks, trackItems, itemEnd, propAt, animState, sourceTimeUnclamped, previousAdjacent, nextAdjacent } from '../core/model.js';
 import { parseColor, clamp } from '../core/util.js';
+import { multicamOf, angleOp } from '../core/multicam.js';
 import { rasterText, rasterShape } from './text.js';
 import { builtinLut, curvesTexture, isIdentityCurves } from './luts.js';
 import { lutRegistry } from './lut-registry.js';
@@ -18,13 +19,23 @@ const BLENDS = { normal: 0, multiply: 1, screen: 2, overlay: 3, add: 4, darken: 
 export function framePlan(project, t) {
   const ops = [];
   const tracks = visualTracks(project);
+  // multi-angle clips draw as one: the angle on screen, or a transition between two
+  const mc = multicamOf(project);
+  const angleIds = mc ? new Set(mc.angles) : null;
+  const angleTracks = mc ? new Set(mc.angles.map((id) => project.items[id].trackId)) : null;
+  let angleDone = false;
   for (let ti = tracks.length - 1; ti >= 0; ti--) {
     const tr = tracks[ti];
+    if (angleTracks?.has(tr.id) && !angleDone) {
+      angleDone = true;
+      const op = angleOp(project, mc, t);
+      if (op) ops.push(op);
+    }
     if (tr.hidden) continue;
     const items = trackItems(project, tr.id);
     const done = new Set();
     for (const it of items) {
-      if (done.has(it.id)) continue;
+      if (done.has(it.id) || angleIds?.has(it.id)) continue;
       const s = it.start;
       const e = itemEnd(it);
       // transition into this item from the previous one

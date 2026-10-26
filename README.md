@@ -78,7 +78,7 @@ The editor reads my original videos and never changes them. Every imported video
 - **Teleprompter:** the script scrolls over the preview at the reading speed I set, on its own or while recording a voiceover or the screen.
 - **Screen recording:** records a screen or a window with the webcam and microphone. The webcam lands as a picture in picture that can still be moved or cut away.
 - **Shorts from a long video:** Claude reads the transcript of a lecture and picks up to 10 moments that stand on their own. Each becomes a 9:16 project with captions and a title, and an MP4.
-- **Multi-camera:** select two or more clips of the same moment and "Sync angles by sound" lines them up. "Switch angles" then plays it and cuts to camera 1, 2 or 3 as I press the number keys.
+- **Several angles of one performance:** import the videos everyone took, then Tools, Sync angles by sound. It puts them on the timeline lined up by their sound, one angle per track, and one sound plays the whole way through. Press 1, 2 or 3 at the playhead, or while it plays, to switch to that angle. The Angles row above the tracks shows which angle is on screen when. Click a switch there to pick Cut, Fade, Dip to black, Blur, Zoom, Wipe, Push, Slide, Circle reveal, Whip pan or Glitch and how long it takes, and drag it to move it. Click a stretch to change its angle. The gear next to Angles picks whose sound is used and the transition new switches get.
 - **Line up the faces:** select a before and an after shot and the after one moves and scales so the faces sit exactly on top of each other, with a 50% view to check it.
 - **Freehand mask:** click around any shape on the preview to keep only that area, with a soft edge, and "Follow the movement" makes it track what it outlines.
 - **Moving photo:** a depth model works out what is near and far in a still product photo, then moves a camera through it (push in, pull out, slide, rise) so the product stands out from the background.
@@ -104,7 +104,7 @@ The editor reads my original videos and never changes them. Every imported video
 - **Match my video:** every new project takes the shape and size of the first video put on the timeline, unless I pick another shape on the start screen for that project. The Frame menu under the preview, next to the time, shows the current shape and changes it at any time. Export warns when the video doesn't fit the frame and offers to export it in the video's own shape.
 - **Shape from the layer below:** a clip can show only inside, or only outside, whatever is cut out on the layer under it, such as a person, a product or a logo after Remove background. Fill the subject of the clip below sets this up in one click for a double-exposure look: it cuts out a copy of the clip below, so the original stays around the subject. Lighten or Screen as the blend mode mixes the two instead of covering the subject.
 - **Silhouette:** Make a silhouette, in Effects or Smart tools, turns a cut-out person or object into one flat colour that follows every movement, so a dancer becomes a moving shadow. The Look can be a solid colour, a colour with shading, or an outline only, and the chips give black, white, gold, rose and teal. Add a shadow that follows it puts a soft dark copy on the layer below. Fill it with the clip above shows the video on the layer above only inside the shape, and Multiply or Screen on that clip mixes the video with the colour.
-- **How-to guides:** press F1, click the ? at the top right, or open Help. Picking a task such as "Separate the sound from a video" lights up each button to press in turn and moves on by itself once the step is done. There are 30 guides, and audio projects show only the ones that apply.
+- **How-to guides:** press F1, click the ? at the top right, or open Help. Picking a task such as "Separate the sound from a video" lights up each button to press in turn and moves on by itself once the step is done. There are 31 guides, and audio projects show only the ones that apply.
 - **Paid services off:** Claude and Replicate stay switched off and hidden until I turn on Paid services in Settings. Everything else runs free on this computer.
 
 ## Speech to text (Whisper)
@@ -164,7 +164,7 @@ The face finder is only 1.2 MB and comes with the editor. The speech model can b
 | Ctrl+S | Save |
 | Ctrl+E | Export |
 | Ctrl+I | Import media |
-| 1, 2, 3 | Switch angles while "Switch angles" is open |
+| 1, 2, 3 | Switch to that angle at the playhead, after Sync angles by sound |
 | Delete | In the Transcript panel, cuts the selected words |
 | Esc | Leaves crop or freehand mask drawing |
 

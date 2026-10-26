@@ -491,7 +491,7 @@ function aiPanel(app) {
     ),
     section(
       'Procedures',
-      tool('Sync angles by sound', 'Select clips of the same moment from two or more phones. They line up by their sound, then 1, 2 and 3 switch between them.', 'Sync', () => app.cmd('syncAngles'), 'cameras'),
+      tool('Sync angles by sound', 'Videos of the same moment from two or more phones line up by their sound, with one sound for the whole video. Then 1, 2 and 3 switch between them.', 'Sync', () => app.cmd('syncAngles'), 'cameras'),
       tool('Line up the faces', 'Select a before and an after shot. The after one moves and scales so the faces match.', 'Line up', () => app.cmd('alignFaces'), 'align'),
       tool('Freehand mask', 'Click around any shape on the preview to keep only that area, and make it follow the movement.', 'Draw', () => app.cmd('freehandMask'), 'pen'),
     ),

@@ -31,11 +31,16 @@ class Store extends Emitter {
 
   _snapshot() {
     const p = this.project;
-    return JSON.stringify({ tracks: p.tracks, items: p.items, markers: p.markers, settings: p.settings, captionStyle: p.captionStyle, name: p.name });
+    return JSON.stringify({ tracks: p.tracks, items: p.items, markers: p.markers, settings: p.settings, captionStyle: p.captionStyle, name: p.name, multicam: p.multicam ?? null });
   }
 
   _restore(snap) {
     const s = JSON.parse(snap);
+    // older history entries have no multicam key, which leaves it as it is
+    if (s.multicam === null) {
+      delete s.multicam;
+      delete this.project.multicam;
+    }
     Object.assign(this.project, s);
     for (const id of [...this.selection]) if (!this.project.items[id]) this.selection.delete(id);
   }

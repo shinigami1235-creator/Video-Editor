@@ -1,13 +1,14 @@
-// Multi-camera: lines up clips of the same moment by their sound, then lets
-// you switch between the angles with the number keys while it plays.
+// Multi-angle: lines up clips of the same moment by their sound. Switching
+// between them is a list of switches the Angles row on the timeline edits
+// (see core/multicam.js); the number keys add one at the playhead.
 
 import { store } from '../core/store.js';
-import { itemEnd, newTrack, isVisualItem } from '../core/model.js';
+import { itemEnd, newTrack, isVisualItem, newClip } from '../core/model.js';
 import * as E from '../core/edit.js';
 import { getPeaks } from '../media/library.js';
 import { toast, startJob } from '../ui/notify.js';
-import { h, button } from '../ui/dom.js';
-import { uid, clone, clamp, formatTime } from '../core/util.js';
+import { clamp } from '../core/util.js';
+import { multicamOf, addSwitch, setSoundAngle } from '../core/multicam.js';
 
 // ---------------------------------------------------------------------------
 // Sync by sound
@@ -156,15 +157,39 @@ export async function syncBySound(refIn, others) {
       o.duration = Math.max(0.2, (om.duration || o.duration) - inPt);
       o.muted = true;
     }
-    pp.multicam = { ref: ref.id, angles: [ref.id, ...placed] };
+    pp.multicam = { angles: [ref.id, ...placed], sound: ref.id, switches: [], defType: 'dissolve', defDur: 0.6 };
+    setSoundAngle(pp, ref.id);
   });
   return results;
 }
 
+/**
+ * Lines up the selected clips. With fewer than two selected it takes every
+ * video with sound on the timeline, and with fewer than two there it puts
+ * every video with sound from the Media panel on the timeline first.
+ */
 export async function syncSelected(app) {
   const p = store.project;
-  const clips = store.selectedItems.filter((i) => i.type === 'clip' && p.media[i.mediaId]?.kind === 'video' && p.media[i.mediaId]?.hasAudio);
-  if (clips.length < 2) return toast('Select two or more video clips of the same moment, each with its own sound.', { timeout: 3500 });
+  const usable = (i) => i.type === 'clip' && p.media[i.mediaId]?.kind === 'video' && p.media[i.mediaId]?.hasAudio;
+  let clips = store.selectedItems.filter(usable);
+  if (clips.length < 2) clips = Object.values(p.items).filter(usable);
+  if (clips.length < 2) {
+    const vids = Object.values(p.media).filter((m) => m.kind === 'video' && m.hasAudio && m.status === 'ready' && !m.hidden && !m.sourceId);
+    if (vids.length < 2) return toast('Import two or more videos of the same moment, each with its own sound.', { timeout: 3500 });
+    const ids = [];
+    store.commit('Add the angles', (pp) => {
+      const main = E.mainTrack(pp);
+      let at = Math.max(0, ...Object.values(pp.items).filter((i) => i.trackId === main.id).map(itemEnd));
+      for (const m of vids) {
+        const c = newClip(m, main.id, at);
+        pp.items[c.id] = c;
+        ids.push(c.id);
+        at += c.duration;
+      }
+    });
+    clips = ids.map((id) => store.project.items[id]);
+    app.fitCanvasTo?.(vids[0]);
+  }
   if (clips.some((c) => c.speedCurve || (c.speed || 1) !== 1)) return toast('Set every angle back to normal speed first.', { kind: 'warn' });
   const main = E.mainTrack(p);
   const ref = clips.find((c) => c.trackId === main?.id) || clips[0];
@@ -177,108 +202,30 @@ export async function syncSelected(app) {
     );
     const weak = res.filter((r) => r.score < 0.15);
     job.done();
-    toast(weak.length ? `Synced, but ${weak.length} angle${weak.length > 1 ? 's' : ''} had little matching sound. Check the lip sync.` : `Synced ${res.length + 1} angles. Press "Switch angles" to cut between them.`, { timeout: 5000, action: { label: 'Switch angles', run: () => showAngleSwitcher(app) } });
+    app.timeline?.zoomToFit();
+    toast(
+      weak.length
+        ? `Synced, but ${weak.length} angle${weak.length > 1 ? 's' : ''} had little matching sound. Check the lip sync.`
+        : `Synced ${res.length + 1} angles. Play it and press ${res.length + 1 > 2 ? '1, 2 or 3' : '1 or 2'} to switch angles, or use the Angles row above the tracks.`,
+      { timeout: 7000 },
+    );
   } catch (e) {
     job.fail(e);
   }
 }
 
-// ---------------------------------------------------------------------------
-// Switching angles live
-// ---------------------------------------------------------------------------
-
-/** Keeps only the given timeline ranges of a clip, leaving each piece where it is. */
-export function keepTimeRanges(p, it, ranges) {
-  const out = [];
-  for (const [a0, b0] of ranges) {
-    const a = Math.max(a0, it.start);
-    const b = Math.min(b0, itemEnd(it));
-    if (b - a < 0.04) continue;
-    const c = clone(it);
-    c.id = uid('c');
-    c.in = it.in + (a - it.start) * (it.speed || 1);
-    c.start = a;
-    c.duration = b - a;
-    c.kf = {};
-    c.transitionIn = null;
-    p.items[c.id] = c;
-    out.push(c);
-  }
-  delete p.items[it.id];
-  return out;
-}
-
-/** Turns a list of [time, angle] switches into cut clips. */
-export function applySwitches(p, angles, switches, end) {
-  const sw = [...switches].sort((a, b) => a[0] - b[0]);
-  for (let ai = 1; ai < angles.length; ai++) {
-    const it = p.items[angles[ai]];
-    if (!it) continue;
-    const ranges = [];
-    for (let k = 0; k < sw.length; k++) if (sw[k][1] === ai) ranges.push([sw[k][0], sw[k + 1]?.[0] ?? end]);
-    keepTimeRanges(p, it, ranges);
-  }
-  delete p.multicam;
-}
-
-export function showAngleSwitcher(app) {
+/** Number key n (1-based) while editing angles: switch to that angle at the playhead. */
+export function switchAtPlayhead(n) {
   const p = store.project;
-  const mc = p.multicam;
-  const angles = (mc?.angles || []).filter((id) => p.items[id]);
-  if (angles.length < 2) return toast('Sync two or more angles by sound first.', { timeout: 3000 });
-  const tracks = angles.map((id) => p.tracks.find((t) => t.id === p.items[id].trackId));
-  const names = angles.map((id, i) => `${i + 1}  ${p.items[id].name || p.media[p.items[id].mediaId]?.name || 'Angle'}`);
-  const start = Math.min(...angles.map((id) => p.items[id].start));
-  const end = Math.max(...angles.map((id) => itemEnd(p.items[id])));
-  const hiddenBefore = tracks.map((t) => t.hidden);
-  let active = 0;
-  let switches = [];
-  let recording = false;
-  const show = (i) => {
-    active = i;
-    store.mutate(() => tracks.forEach((t, k) => k > 0 && (t.hidden = k !== i)));
-    btns.forEach((b, k) => b.classList.toggle('active', k === i));
-  };
-  const btns = names.map((n, i) => button(n, () => pick(i), { cls: 'angle-btn' }));
-  const recBtn = button('Record the cuts', () => (recording ? stop(true) : startRec()), { kind: 'primary', icon: 'record' });
-  const bar = h('div', { class: 'angle-bar' }, h('span', { class: 'dim' }, 'Angles'), ...btns, recBtn, button('Close', () => stop(false), { kind: 'link' }));
-  app.viewerEl.append(bar);
-  const pick = (i) => {
-    if (i < 0 || i >= angles.length) return;
-    show(i);
-    if (recording) switches.push([store.playhead, i]);
-  };
-  const onKey = (e) => {
-    const n = Number(e.key);
-    if (n >= 1 && n <= angles.length && !e.ctrlKey && !/INPUT|TEXTAREA/.test(document.activeElement?.tagName)) {
-      e.preventDefault();
-      e.stopPropagation();
-      pick(n - 1);
-    }
-  };
-  document.addEventListener('keydown', onKey, true);
-  function startRec() {
-    recording = true;
-    switches = [[start, active]];
-    app.seek(start);
-    app.preview.play();
-    recBtn.querySelector('span').textContent = 'Stop and cut';
-    recBtn.classList.add('recording');
-  }
-  function stop(apply) {
-    document.removeEventListener('keydown', onKey, true);
-    app.preview.pause();
-    bar.remove();
-    store.mutate(() => tracks.forEach((t, k) => (t.hidden = hiddenBefore[k])));
-    if (apply && switches.length) {
-      const cutEnd = Math.max(store.playhead, switches[switches.length - 1][0]);
-      // after the last recorded moment the current angle carries on to the end
-      store.commit('Switch angles', (pp) => applySwitches(pp, angles, switches, end));
-      toast(`Cut between ${angles.length} angles with ${switches.length - 1} switches up to ${formatTime(cutEnd)}.`);
-    }
-  }
-  show(0);
-  toast('Press 1, 2 or 3 to switch angles. "Record the cuts" plays it and keeps every switch you press.', { timeout: 5000 });
+  const mc = multicamOf(p);
+  if (!mc || n < 1 || n > mc.angles.length) return false;
+  store.commit(`Switch to angle ${n}`, (pp) => addSwitch(pp, store.playhead, n - 1));
+  return true;
+}
+
+export function showAngleSwitcher() {
+  if (!multicamOf(store.project)) return toast('Sync two or more angles by sound first.', { timeout: 3000 });
+  toast('Play the video and press 1, 2 or 3 to switch angles at that moment. Click a switch in the Angles row above the tracks to change its transition.', { timeout: 7000 });
 }
 
 export { isVisualItem, clamp };

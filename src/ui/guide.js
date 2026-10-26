@@ -178,6 +178,26 @@ export const GUIDES = [
     finish: 'The videos are joined end to end on the main track.',
   },
 
+  {
+    id: 'angles',
+    group: 'Basics',
+    title: 'Switch between phone angles of one performance',
+    video: true,
+    steps: () => {
+      const mcOn = () => !!store.project.multicam;
+      const enough = () => mcOn() || Object.values(P().media).filter((m) => m.kind === 'video' && m.hasAudio && !m.hidden).length >= 2;
+      return [
+        panelStep('media', 'Media', enough),
+        { text: 'Click Import and pick two or more videos of the same moment, each with its own sound.', target: () => byText('.panel button', 'Import'), done: enough },
+        { text: 'Click Tools at the top.', target: () => byText('.menu-btn', 'Tools'), done: () => mcOn() || menuOpen('Sync angles by sound') },
+        { text: 'Click Sync angles by sound. With nothing selected it uses every video.', target: () => byText('.ctx .ctx-item', 'Sync angles by sound'), done: mcOn },
+        { text: 'Put the playhead where angle 2 should take over and press 2. Press 1 to go back to angle 1. It works while playing too.', target: () => q('.tl-angle-lane'), done: () => (store.project.multicam?.switches || []).length > 0 },
+        { text: 'Click the switch in the Angles row and pick Fade, Dip to black or another transition.', target: () => q('.tl-angle-sw'), done: () => !!q('.tl-pop') },
+      ];
+    },
+    finish: 'Drag a switch to move it. The gear next to Angles picks whose sound plays the whole way through and the transition new switches get.',
+  },
+
   // ---- sound ----
   {
     id: 'separate',

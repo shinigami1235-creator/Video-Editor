@@ -37,35 +37,17 @@ try {
   check('second angle sits on its own track with its sound muted', !sync.sameTrack && (sync.bMuted || sync.aMuted) && sync.mc === 2, JSON.stringify(sync));
   await page.screenshot({ path: '/tmp/ve-proc-1.png' });
 
-  // ---- switch angles ----------------------------------------------------------------
-  await page.evaluate(() => window.__app.cmd('switchAngles'));
-  await page.waitForSelector('.angle-bar');
+  // ---- switch angles: a number key adds a switch at the playhead -----------------------
+  await page.evaluate(() => {
+    const s = window.__store;
+    s.clearSelection();
+    window.__app.seek(s.project.items[s.project.multicam.angles[1]].start + 2);
+  });
   await page.keyboard.press('2');
-  const hid = await page.evaluate(() => {
-    const s = window.__store;
-    const b = s.project.items[s.project.multicam.angles[1]];
-    return s.project.tracks.find((t) => t.id === b.trackId).hidden;
-  });
-  await page.keyboard.press('1');
-  const hid1 = await page.evaluate(() => {
-    const s = window.__store;
-    const b = s.project.items[s.project.multicam.angles[1]];
-    return s.project.tracks.find((t) => t.id === b.trackId).hidden;
-  });
-  check('number keys switch the visible angle', hid === false && hid1 === true, `${hid} ${hid1}`);
+  await sleep(200);
+  const sw = await page.evaluate(() => window.__store.project.multicam.switches.map((x) => ({ a: x.a, type: x.type })));
+  check('a number key switches to that angle at the playhead', sw.length === 1 && sw[0].a === 1, JSON.stringify(sw));
   await page.screenshot({ path: '/tmp/ve-proc-2.png' });
-  await page.click('.angle-bar button:has-text("Close")');
-  const cut = await page.evaluate(async () => {
-    const s = window.__store;
-    const mc = await import('/src/ai/multicam.js');
-    const angles = s.project.multicam.angles;
-    const b = s.project.items[angles[1]];
-    const start = b.start;
-    s.commit('switch', (p) => mc.applySwitches(p, angles, [[0, 0], [start + 1, 1], [start + 3, 0], [start + 5, 1]], 20));
-    const pieces = Object.values(s.project.items).filter((i) => i.mediaId === b.mediaId).sort((x, y) => x.start - y.start);
-    return pieces.map((pc) => [+(pc.start - start).toFixed(2), +pc.duration.toFixed(2), +(pc.in - b.in).toFixed(2)]);
-  });
-  check('recorded switches cut the second angle', cut.length === 2 && cut[0][0] === 1 && cut[0][1] === 2 && cut[1][0] === 5 && Math.abs(cut[1][2] - 5) < 0.01, JSON.stringify(cut));
 
   // ---- before and after alignment ------------------------------------------------------
   const [face, faceAfter] = (await importAndWait(page, [`${FIX}/portrait.jpg`, `${FIX}/portrait-after.jpg`])).map((m) => m.id);

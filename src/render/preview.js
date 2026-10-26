@@ -6,6 +6,7 @@ import { store } from '../core/store.js';
 import { itemEnd, instantSpeed, propAt, sourceTimeUnclamped, isVisualItem, trackItems } from '../core/model.js';
 import { mediaUrl, loadImage } from '../media/library.js';
 import { clamp } from '../core/util.js';
+import { multicamOf, upcomingAngles } from '../core/multicam.js';
 import { voiceActive } from '../export/audio-mix.js';
 import { audioFx, EQ_BANDS, ensurePitched, pitchedSync, pitchFailed } from '../media/audio-fx.js';
 import { fileUrl } from '../backend/index.js';
@@ -274,6 +275,15 @@ export class Preview {
         want.set(it.id, { item: it, media: m, time: it.in, audio: !visual || m.kind === 'audio', preroll: true });
       }
     }
+    // an angle about to come on screen plays along silently, so the switch shows no stall
+    const mc = this.playing ? multicamOf(project) : null;
+    if (mc)
+      for (const it of upcomingAngles(project, mc, t, 1.5)) {
+        if (want.has(it.id)) continue;
+        const m = project.media[it.mediaId];
+        if (!m || m.kind !== 'video' || m.status !== 'ready' || t < it.start || t >= itemEnd(it)) continue;
+        want.set(it.id, { item: it, media: m, time: clamp(sourceTimeUnclamped(it, t), 0, m.duration || 0), audio: false });
+      }
     const keep = new Set();
     for (const [id, w] of want) {
       if (w.media.status !== 'ready') continue;

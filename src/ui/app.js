@@ -33,7 +33,7 @@ const GUIDE_TITLES = {
 };
 
 // commands that only make sense with a picture; audio projects skip them
-const VIDEO_ONLY = new Set(['addText', 'addShape', 'addBlur', 'addAdjustment', 'addSolid', 'crop', 'freeze', 'splitScreen', 'pip', 'freehandMask', 'depthShot', 'addFx', 'alignFaces', 'upscale', 'aiUpscale', 'removeBackground', 'autoReframe', 'faceBlur', 'stabilize', 'smoothSlowmo', 'syncAngles', 'switchAngles', 'trackMask', 'recordScreen', 'shorts', 'avatar', 'saveTemplate', 'scriptToVideo', 'captions', 'translate', 'chapters', 'detachAudio', 'fillSubjectBelow', 'silhouette', 'silhouetteShadow', 'fillSilhouette']);
+const VIDEO_ONLY = new Set(['addText', 'addShape', 'addBlur', 'addAdjustment', 'addSolid', 'crop', 'freeze', 'splitScreen', 'pip', 'freehandMask', 'depthShot', 'addFx', 'alignFaces', 'upscale', 'aiUpscale', 'removeBackground', 'autoReframe', 'faceBlur', 'stabilize', 'smoothSlowmo', 'syncAngles', 'switchAngles', 'stopAngles', 'trackMask', 'recordScreen', 'shorts', 'avatar', 'saveTemplate', 'scriptToVideo', 'captions', 'translate', 'chapters', 'detachAudio', 'fillSubjectBelow', 'silhouette', 'silhouetteShadow', 'fillSilhouette']);
 
 export class App {
   constructor(root) {
@@ -371,7 +371,8 @@ export class App {
       ...(paid ? [null, ['Make shorts from a long video', () => this.cmd('shorts')]] : []),
       null,
       ['Sync angles by sound', () => this.cmd('syncAngles')],
-      ['Switch angles', () => this.cmd('switchAngles'), !store.project.multicam],
+      ['How to switch angles', () => this.cmd('switchAngles'), !store.project.multicam],
+      ['Stop editing angles', () => this.cmd('stopAngles'), !store.project.multicam],
       ['Line up before and after faces', () => this.cmd('alignFaces')],
       ['Freehand mask', () => this.cmd('freehandMask')],
       null,
@@ -460,6 +461,11 @@ export class App {
         return this.cmd(e.shiftKey ? 'saveAs' : 'save');
       }
       if (typing) return;
+      // multi-angle: 1-9 switch to that angle at the playhead, Delete removes the picked switch
+      if (!ctrl && !e.altKey && store.project.multicam) {
+        if (/^[1-9]$/.test(k) && this.angleSwitch?.(Number(k))) return e.preventDefault();
+        if ((k === 'Delete' || k === 'Backspace') && this.timeline.selSwitch && this.timeline.removeSwitch(this.timeline.selSwitch)) return e.preventDefault();
+      }
       const map = {
         ' ': () => this.preview.toggle(),
         s: () => this.cmd('split'),
@@ -891,6 +897,25 @@ export class App {
     const { syncSelected } = await import('../ai/multicam.js');
     return syncSelected(this);
   }
+  /** Switches to angle n at the playhead (the multi-angle code loads on first use). */
+  angleSwitch(n) {
+    if (!this._mc) {
+      import('../ai/multicam.js').then((m) => {
+        this._mc = m;
+        m.switchAtPlayhead(n);
+      });
+      return true;
+    }
+    return this._mc.switchAtPlayhead(n);
+  }
+
+  /** Back to ordinary clips: every angle shows on its own track again. */
+  c_stopAngles() {
+    if (!store.project.multicam) return;
+    store.commit('Stop editing angles', (pp) => delete pp.multicam);
+    toast('The angles are ordinary clips again. The top track covers the ones under it.', { timeout: 4000 });
+  }
+
   async c_switchAngles() {
     const { showAngleSwitcher } = await import('../ai/multicam.js');
     return showAngleSwitcher(this);
