@@ -2601,3 +2601,23 @@ body.audio-mode .video-only {
 .tl-pop-angles { display: flex; flex-wrap: wrap; gap: 6px; }
 .tl-pop-angles .chip { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; }
 .tl-pop-types .chip { font-size: 11.5px; }
+
+.claude-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: var(--dim);
+  padding: 3px 9px;
+  border: 1px solid var(--line2);
+  border-radius: 999px;
+  margin-right: 6px;
+  white-space: nowrap;
+}
+.claude-badge[hidden] { display: none; }
+.claude-badge i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ok);
+}

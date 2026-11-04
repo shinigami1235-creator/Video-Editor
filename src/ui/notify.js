@@ -7,6 +7,9 @@ let toastHost = null;
 let jobHost = null;
 const jobs = new Map();
 
+// Claude control watches toasts and jobs, and answers dialogs itself while it runs a command
+export const notifyHooks = { onToast: null, onJob: null, autoModal: null };
+
 export function initNotify(root) {
   toastHost = h('div', { class: 'toasts' });
   jobHost = h('div', { class: 'jobs' });
@@ -14,6 +17,7 @@ export function initNotify(root) {
 }
 
 export function toast(message, { kind = 'info', timeout = 3500, action } = {}) {
+  notifyHooks.onToast?.(kind, message);
   const t = h('div', { class: `toast toast-${kind}` }, h('span', {}, message));
   if (action) t.append(button(action.label, () => { action.run(); t.remove(); }, { kind: 'link' }));
   t.append(h('button', { class: 'toast-x', onclick: () => t.remove(), 'aria-label': 'Close' }, icon('x', 14)));
@@ -41,9 +45,13 @@ export function startJob(title, { cancellable = true } = {}) {
   const id = Math.random().toString(36).slice(2);
   jobs.set(id, el);
   const fill = bar.firstChild;
+  const info = { title, fraction: null, label: 'Starting', state: 'running', cancel: () => ctrl.abort() };
+  notifyHooks.onJob?.(info);
   const api = {
     signal: ctrl.signal,
     update(fraction, text) {
+      if (fraction != null) info.fraction = fraction;
+      if (text) info.label = text;
       if (fraction == null) el.classList.add('indeterminate');
       else {
         el.classList.remove('indeterminate');
@@ -56,11 +64,14 @@ export function startJob(title, { cancellable = true } = {}) {
       api.update(p.total ? p.received / p.total : null, txt);
     },
     done(msg) {
+      info.state = 'done';
       jobs.delete(id);
       el.remove();
       if (msg) toast(msg, { kind: 'success' });
     },
     fail(e) {
+      info.state = e?.name === 'AbortError' ? 'cancelled' : 'failed';
+      info.error = e?.message || String(e);
       jobs.delete(id);
       el.remove();
       // callers that rethrow should not show the same error a second time
@@ -80,7 +91,25 @@ export function activeJobs() {
 // Modal dialogs
 // ---------------------------------------------------------------------------
 
-export function modal(title, body, { actions = [], width = 520, onClose, cls = '' } = {}) {
+export function modal(title, body, { actions = [], width = 520, onClose, cls = '', kind = '' } = {}) {
+  // while Claude runs a command, its dialogs are answered without showing them
+  const answer = notifyHooks.autoModal?.(title, { kind, actions });
+  if (answer) {
+    let closed = false;
+    const close = (v) => {
+      if (closed) return;
+      closed = true;
+      onClose?.(v);
+    };
+    const box = h('div', {}, h('div', { class: 'modal-body' }, body));
+    setTimeout(() => {
+      if ('value' in answer) return close(answer.value);
+      const primary = actions.find((a) => a.primary);
+      if (primary) primary.run(close);
+      else close(null);
+    }, 0);
+    return { close, box, body: box.firstChild };
+  }
   const overlay = h('div', { class: 'modal-overlay' });
   const box = h('div', { class: `modal ${cls}`, style: { width: width + 'px' }, role: 'dialog', 'aria-label': title });
   const close = (v) => {
@@ -112,6 +141,7 @@ export function confirmDialog(title, message, { ok = 'OK', cancel = 'Cancel', da
   return new Promise((resolve) => {
     modal(title, h('p', {}, message), {
       width: 440,
+      kind: 'confirm',
       onClose: (v) => resolve(!!v),
       actions: [
         { label: cancel, run: (close) => close(false) },
@@ -127,6 +157,7 @@ export function promptDialog(title, label, value = '', { ok = 'OK', multiline = 
     inp.value = value;
     const m = modal(title, h('div', { class: 'row col' }, h('label', {}, label), inp), {
       width: 460,
+      kind: 'prompt',
       onClose: (v) => resolve(v),
       actions: [
         { label: 'Cancel', run: (close) => close(null) },

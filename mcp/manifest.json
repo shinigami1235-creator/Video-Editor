@@ -1,0 +1,133 @@
+{
+  "manifest_version": "0.3",
+  "name": "video-editor",
+  "display_name": "Video Editor",
+  "version": "1.0.0",
+  "description": "Lets Claude edit in Gid's Video Editor: import, cut, add text, run the smart tools, switch angles and export.",
+  "long_description": "Connects Claude to the Video Editor running on this computer. Claude can read the project, look at frames, import media, place and change clips, add text and captions, run the free smart tools (background removal, silhouettes, face blur, voice clean-up, silence cutting and more), switch between phone angles and export for Instagram, TikTok or YouTube. Every change shows in the editor and can be undone with Ctrl+Z. The editor must be open with Settings > Claude control switched on.",
+  "author": {
+    "name": "Gid"
+  },
+  "icon": "icon.png",
+  "server": {
+    "type": "node",
+    "entry_point": "server.mjs",
+    "mcp_config": {
+      "command": "node",
+      "args": [
+        "${__dirname}/server.mjs"
+      ],
+      "env": {}
+    }
+  },
+  "tools": [
+    {
+      "name": "editor_status",
+      "description": "Is the editor open?"
+    },
+    {
+      "name": "get_project",
+      "description": "Read the project"
+    },
+    {
+      "name": "get_frame",
+      "description": "Look at a frame"
+    },
+    {
+      "name": "list_options",
+      "description": "List the options"
+    },
+    {
+      "name": "new_project",
+      "description": "New project"
+    },
+    {
+      "name": "open_project",
+      "description": "Open a project"
+    },
+    {
+      "name": "save_project",
+      "description": "Save the project"
+    },
+    {
+      "name": "set_frame",
+      "description": "Set the frame"
+    },
+    {
+      "name": "import_media",
+      "description": "Import files"
+    },
+    {
+      "name": "add_clips",
+      "description": "Put media on the timeline"
+    },
+    {
+      "name": "edit_items",
+      "description": "Change items"
+    },
+    {
+      "name": "split_at",
+      "description": "Split"
+    },
+    {
+      "name": "delete_items",
+      "description": "Delete items"
+    },
+    {
+      "name": "duplicate_items",
+      "description": "Duplicate items"
+    },
+    {
+      "name": "add_text",
+      "description": "Add text"
+    },
+    {
+      "name": "run_tool",
+      "description": "Run a smart tool"
+    },
+    {
+      "name": "angles",
+      "description": "Several angles of one moment"
+    },
+    {
+      "name": "add_marker",
+      "description": "Add a marker"
+    },
+    {
+      "name": "playback",
+      "description": "Play, pause or move the playhead"
+    },
+    {
+      "name": "select_items",
+      "description": "Select items"
+    },
+    {
+      "name": "history",
+      "description": "Undo or redo"
+    },
+    {
+      "name": "export",
+      "description": "Export"
+    },
+    {
+      "name": "check_job",
+      "description": "Check a running job"
+    }
+  ],
+  "keywords": [
+    "video",
+    "editor",
+    "audio",
+    "instagram"
+  ],
+  "license": "UNLICENSED",
+  "compatibility": {
+    "platforms": [
+      "win32",
+      "darwin"
+    ],
+    "runtimes": {
+      "node": ">=18.0.0"
+    }
+  }
+}

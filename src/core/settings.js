@@ -30,6 +30,7 @@ export const DEFAULT_SETTINGS = {
   snapping: true,
   magneticDefault: true,
   paidServices: false,
+  claudeControl: true,
 };
 
 /** Claude and Replicate cost money per use, so they stay off until switched on in Settings. */

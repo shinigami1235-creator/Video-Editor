@@ -129,6 +129,11 @@ export function showSettings(app) {
       }),
     ),
     paidBox,
+    section(
+      'Claude control',
+      h('p', { class: 'hint' }, 'With the Video Editor connector added to the Claude app on this computer, Claude can edit here from a chat: import files, cut, add text, run the smart tools and export. Every change can be undone with Ctrl+Z. The badge at the top shows "Claude connected" while it can.'),
+      toggle('Let Claude control the editor', s.claudeControl !== false, (v) => saveSettings({ claudeControl: v })),
+    ),
     section('About', h('div', { class: 'hint' }, `Video Editor 0.4.0. App data: ${paths.appData}. Cache: ${paths.cache}.`)),
   );
   modal('Settings', body, { width: 620, actions: [{ label: 'Done', primary: true, run: (close) => close(true) }] });

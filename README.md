@@ -107,6 +107,19 @@ The editor reads my original videos and never changes them. Every imported video
 - **How-to guides:** press F1, click the ? at the top right, or open Help. Picking a task such as "Separate the sound from a video" lights up each button to press in turn and moves on by itself once the step is done. There are 31 guides, and audio projects show only the ones that apply.
 - **Paid services off:** Claude and Replicate stay switched off and hidden until I turn on Paid services in Settings. Everything else runs free on this computer.
 
+## Claude control
+
+Claude can edit in the editor from a chat in the Claude app on this computer: import files, place and cut clips, add text, run the smart tools, switch angles and export. Every change shows in the editor straight away and Ctrl+Z undoes it.
+
+It works through `Video Editor for Claude.mcpb` in this folder, a Claude extension. Double-clicking it opens the Claude app, which asks to install it. The editor connects by itself when it's open and Settings > Claude control is on, and the top bar then shows "Claude connected".
+
+- **How it connects:** the extension runs a small server on this computer only (`mcp/server.mjs`, port 47811). It writes its port and a random key to `.cygnus-video-editor\bridge.json` in my user folder, and the editor reads that file to connect. Web pages can't reach it, since every request needs that key and requests from a browser are refused.
+- **What Claude can use:** 23 tools: editor status, read the project, look at a frame, list the options, new, open and save project, set the frame, import, add clips, change items, split, delete, duplicate, add text, run a smart tool, angles, markers, play and pause, select, undo and redo, export, and check a running job. The tools are described in `mcp/tools.mjs`, and the editor side is `src/ai/claude-tools.js`.
+- **Long jobs:** captions, background removal, voice clean-up and exports keep running in the editor while Claude checks on them.
+- **Dialogs:** a dialog a tool opens on its own is answered automatically, such as the background removal model. "Unsaved changes" always answers No unless I told Claude to discard them.
+- **Paid services** (shorts, translation, AI generation) aren't available through Claude control.
+- **New version of the extension:** after `mcp/` changes, `npx @anthropic-ai/mcpb pack mcp "Video Editor for Claude.mcpb"` makes a new file to install over the old one.
+
 ## Speech to text (Whisper)
 
 Captions, the transcript, filler word removal and dubbing timing all use whisper.cpp, which runs on this computer for free and sends nothing anywhere. It sets itself up the first time I use one of those, or ahead of time from Settings, under Speech to text, with Download now. That page also shows whether the engine and the model are ready.

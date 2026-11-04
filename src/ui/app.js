@@ -117,6 +117,7 @@ export class App {
       menuBtn('Help', () => this.helpMenu()),
       this.titleEl,
       h('div', { class: 'spacer' }),
+      (this.claudeBadge = h('span', { class: 'claude-badge', hidden: true, title: 'Claude can control the editor from a chat. Turn it off in Settings, under Claude control.' }, h('i'), 'Claude connected')),
       this.undoBtn,
       this.redoBtn,
       iconButton('save', () => this.cmd('save'), 'Save (Ctrl+S)'),
@@ -143,6 +144,11 @@ export class App {
     this.bindSplitter();
     this.bindKeys();
     this.bindDrops();
+    // Claude control: connects when the Video Editor connector runs in the Claude app
+    import('../ai/claude-bridge.js').then(({ startClaudeBridge, onClaudeStatus }) => {
+      onClaudeStatus((st) => (this.claudeBadge.hidden = st !== 'connected'));
+      startClaudeBridge(this);
+    });
     store.on('history', () => this.updateTitle());
     store.on('change', () => this.updateTitle());
     store.on('saved', () => this.updateTitle());
