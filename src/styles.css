@@ -2656,3 +2656,21 @@ body.audio-mode .video-only {
   border-radius: 50%;
   background: var(--ok);
 }
+
+.update-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--gold2);
+  background: transparent;
+  padding: 4px 10px;
+  border: 1px solid var(--gold);
+  border-radius: 999px;
+  margin-right: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.update-badge:hover { background: rgba(224, 184, 74, 0.12); }
+.update-badge[hidden] { display: none; }

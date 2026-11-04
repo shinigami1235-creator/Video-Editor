@@ -80,6 +80,7 @@ export function showSettings(app) {
       textInput('Model', s.claudeModel || 'claude-sonnet-5', null, { onCommit: (v) => saveSettings({ claudeModel: v.trim() }) }),
     ),
   );
+  let verLine = null;
   const body = h(
     'div',
     { class: 'settings' },
@@ -134,7 +135,15 @@ export function showSettings(app) {
       h('p', { class: 'hint' }, 'With the Video Editor connector added to the Claude app on this computer, Claude can edit here from a chat: import files, cut, add text, run the smart tools and export. Every change can be undone with Ctrl+Z. The badge at the top shows "Claude connected" while it can.'),
       toggle('Let Claude control the editor', s.claudeControl !== false, (v) => saveSettings({ claudeControl: v })),
     ),
-    section('About', h('div', { class: 'hint' }, `Video Editor 0.4.0. App data: ${paths.appData}. Cache: ${paths.cache}.`)),
+    section(
+      'Updates',
+      (verLine = h('p', { class: 'hint' }, 'Video Editor')),
+      h('p', { class: 'hint' }, 'The editor checks for a new version a little after it opens and every few hours, and downloads it by itself. "Update ready" at the top installs it straight away.'),
+      toggle('Install updates when I close the editor', s.updateOnClose !== false, (v) => saveSettings({ updateOnClose: v })),
+      h('div', { class: 'btn-row' }, button('Check for updates', () => import('./updater.js').then((u) => u.checkForUpdate()), { icon: 'download' })),
+    ),
+    section('About', h('div', { class: 'hint' }, `App data: ${paths.appData}. Cache: ${paths.cache}.`)),
   );
+  import('./updater.js').then(async (u) => (verLine.textContent = `This is version ${await u.appVersion()}.`));
   modal('Settings', body, { width: 620, actions: [{ label: 'Done', primary: true, run: (close) => close(true) }] });
 }

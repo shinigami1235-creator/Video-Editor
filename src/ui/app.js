@@ -117,6 +117,7 @@ export class App {
       menuBtn('Help', () => this.helpMenu()),
       this.titleEl,
       h('div', { class: 'spacer' }),
+      (this.updateBadge = h('button', { class: 'update-badge', type: 'button', hidden: true }, icon('download', 14), 'Update ready')),
       (this.claudeBadge = h('span', { class: 'claude-badge', hidden: true, title: 'Claude can control the editor from a chat. Turn it off in Settings, under Claude control.' }, h('i'), 'Claude connected')),
       this.undoBtn,
       this.redoBtn,
@@ -145,6 +146,7 @@ export class App {
     this.bindKeys();
     this.bindDrops();
     // Claude control: connects when the Video Editor connector runs in the Claude app
+    import('./updater.js').then(({ startUpdater }) => startUpdater(this, this.updateBadge));
     import('../ai/claude-bridge.js').then(({ startClaudeBridge, onClaudeStatus }) => {
       onClaudeStatus((st) => (this.claudeBadge.hidden = st !== 'connected'));
       startClaudeBridge(this);
@@ -325,6 +327,8 @@ export class App {
       ['How do I...', () => this.cmd('guides'), false, 'F1'],
       null,
       ...quick.map((id) => [GUIDE_TITLES[id], () => this.cmd('guide', id)]),
+      null,
+      ['Check for updates', () => import('./updater.js').then((u) => u.checkForUpdate())],
     ];
   }
 

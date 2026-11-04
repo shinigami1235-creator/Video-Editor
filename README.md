@@ -107,6 +107,15 @@ The editor reads my original videos and never changes them. Every imported video
 - **How-to guides:** press F1, click the ? at the top right, or open Help. Picking a task such as "Separate the sound from a video" lights up each button to press in turn and moves on by itself once the step is done. There are 31 guides, and audio projects show only the ones that apply.
 - **Paid services off:** Claude and Replicate stay switched off and hidden until I turn on Paid services in Settings. Everything else runs free on this computer.
 
+## Updates
+
+The installed editor updates itself. A little after it opens, and every 4 hours, it checks the newest release on GitHub. When there's a newer version it downloads it quietly and shows **Update ready** at the top. Clicking that saves the project, installs the update and reopens the editor. Otherwise the update installs when the editor closes, which Settings > Updates can turn off. Help > Check for updates checks straight away.
+
+- **Signing:** each update is signed, and the editor checks the signature against the key in `src-tauri/tauri.conf.json` before installing anything.
+- **The private key:** it's in `updater-key\video-editor-updater.key` on my laptop only, never on GitHub. The same text is saved as the `TAURI_SIGNING_PRIVATE_KEY` secret in the repository's Settings > Secrets and variables > Actions, which the build uses to sign.
+- **If the key is lost:** the next updates can't be signed, and everyone has to install once by hand again. So I keep a copy somewhere safe.
+- **Version numbers:** every build gets a higher number (0.5 and the build number), which is how the editor knows a build is newer.
+
 ## Claude control
 
 Claude can edit in the editor from a chat in the Claude app on this computer: import files, place and cut clips, add text, run the smart tools, switch angles and export. Every change shows in the editor straight away and Ctrl+Z undoes it.

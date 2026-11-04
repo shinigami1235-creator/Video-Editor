@@ -104,12 +104,20 @@ export function startAutosave() {
     });
 }
 
-/** Asks to save unsaved changes when the window closes. */
+// things to do as the window closes, such as installing a downloaded update
+export const closeHooks = [];
+
+/** Asks to save unsaved changes when the window closes, then runs the close hooks. */
 async function watchWindowClose() {
   const { getCurrentWindow } = await import('@tauri-apps/api/window');
   const win = getCurrentWindow();
   win.onCloseRequested(async (e) => {
-    if (!store.dirty || !Object.keys(store.project.items).length) return;
+    if (!store.dirty || !Object.keys(store.project.items).length) {
+      if (!closeHooks.length) return;
+      e.preventDefault();
+      for (const hook of closeHooks) await hook().catch(() => {});
+      return win.destroy();
+    }
     e.preventDefault();
     const choice = await new Promise((resolve) => {
       const { modal } = window.__notify;
@@ -126,6 +134,7 @@ async function watchWindowClose() {
     if (!choice) return;
     if (choice === 'save' && !(await saveProject())) return;
     if (choice === 'discard') await remove(join(autosaveDir(), store.project.id + '.' + PROJECT_EXT)).catch(() => {});
+    for (const hook of closeHooks) await hook().catch(() => {});
     await win.destroy();
   });
 }

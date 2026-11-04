@@ -12,6 +12,8 @@ pub fn run() {
 
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(jobs)
         .register_asynchronous_uri_scheme_protocol("media", media::handler)
         .invoke_handler(tauri::generate_handler![
