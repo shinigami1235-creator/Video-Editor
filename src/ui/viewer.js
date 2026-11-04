@@ -107,7 +107,7 @@ export class Viewer {
         iconButton('next', () => this.app.cmd('nextEdit'), 'Next cut (Down)'),
         iconButton('toEnd', () => this.app.cmd('goEnd'), 'Go to the end (End)'),
       ),
-      h('div', { class: 'transport-right' }, this.loopBtn, this.safeBtn, h('span', { class: 'icon-wrap', title: 'Preview volume' }, icon('volume', 16)), vol, this.qualitySel, (this.fullBtn = iconButton('expand', () => this.fullscreen(), 'Full screen preview'))),
+      h('div', { class: 'transport-right' }, this.loopBtn, this.safeBtn, h('span', { class: 'icon-wrap vol-icon', title: 'Preview volume' }, icon('volume', 16)), vol, this.qualitySel, (this.fullBtn = iconButton('expand', () => this.fullscreen(), 'Full screen preview'))),
     );
     for (const el of [this.safeBtn, this.qualitySel, this.fullBtn, this.frameSel]) el.classList.add('video-only');
     this.syncFrame();

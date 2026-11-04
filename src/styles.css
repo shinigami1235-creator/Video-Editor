@@ -542,6 +542,40 @@ h4 {
   display: flex;
   align-items: center;
   gap: 4px;
+  /* both sides give up room before anything spills past the preview */
+  min-width: 0;
+}
+
+.transport {
+  container-type: inline-size;
+}
+
+.transport-right > * {
+  flex: none;
+}
+
+.transport .mini-range {
+  flex: 0 1 90px;
+  min-width: 40px;
+}
+
+/* a narrow preview drops the extras first: the volume slider, then the frame grid */
+@container (max-width: 900px) {
+  .transport .mini-range,
+  .transport .vol-icon {
+    display: none;
+  }
+  select.frame-sel {
+    max-width: 150px;
+  }
+}
+@container (max-width: 720px) {
+  .transport-right .ibtn:not(:last-child) {
+    display: none;
+  }
+  .transport-left > span.dim {
+    display: none;
+  }
 }
 
 .transport-right {
@@ -574,7 +608,8 @@ select.mini {
 select.frame-sel {
   margin-left: 10px;
   max-width: 200px;
-  min-width: 0;
+  flex: 0 1 auto;
+  min-width: 80px;
   text-overflow: ellipsis;
 }
 
