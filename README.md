@@ -115,6 +115,7 @@ The installed editor updates itself. A little after it opens, and every 4 hours,
 - **The private key:** it's in `updater-key\video-editor-updater.key` on my laptop only, never on GitHub. The same text is saved as the `TAURI_SIGNING_PRIVATE_KEY` secret in the repository's Settings > Secrets and variables > Actions, which the build uses to sign.
 - **If the key is lost:** the next updates can't be signed, and everyone has to install once by hand again. So I keep a copy somewhere safe.
 - **Version numbers:** every build gets a higher number (0.5 and the build number), which is how the editor knows a build is newer.
+- **Signing on GitHub:** the signing secret was added on 5 November 2026, so every build from then on publishes a signed update.
 
 ## Claude control
 
