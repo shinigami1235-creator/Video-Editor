@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "video-editor",
   "display_name": "Video Editor",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Lets Claude edit in Gid's Video Editor: import, cut, add text, run the smart tools, switch angles and export.",
   "long_description": "Connects Claude to the Video Editor running on this computer. Claude can read the project, look at frames, import media, place and change clips, add text and captions, run the free smart tools (background removal, silhouettes, face blur, voice clean-up, silence cutting and more), switch between phone angles and export for Instagram, TikTok or YouTube. Every change shows in the editor and can be undone with Ctrl+Z. The editor must be open with Settings > Claude control switched on.",
   "author": {

@@ -16,7 +16,7 @@ How to work:
 
 const time = { description: 'Seconds from the start of the timeline. Also "playhead" or "end".', anyOf: [{ type: 'number', minimum: 0 }, { type: 'string', enum: ['playhead', 'end'] }] };
 const ids = { type: 'array', items: { type: 'string' }, description: 'Item ids from get_project.' };
-const wait = { type: 'number', minimum: 1, maximum: 100, description: 'How long to wait for the result before answering with a job_id (default 50).' };
+const wait = { type: 'number', minimum: 1, maximum: 40, description: 'How long to wait for the result before answering with a job_id (default 35, at most 40, since the Claude app stops waiting after about a minute).' };
 const obj = (properties, required = []) => ({ type: 'object', properties, required, additionalProperties: false });
 const ro = { readOnlyHint: true, openWorldHint: false };
 

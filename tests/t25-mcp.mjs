@@ -22,8 +22,8 @@ if (!fs.existsSync(`${DIR}/red.mp4`)) {
 }
 
 /** A tiny MCP client over the server's stdio. */
-function mcpClient() {
-  const proc = spawn('node', [path.join(ROOT, 'mcp/server.mjs')], { env: { ...process.env, VE_BRIDGE_DIR: BRIDGE_DIR, VE_MCP_PORT: '47900' }, stdio: ['pipe', 'pipe', 'pipe'] });
+function mcpClient(bridgeDir = BRIDGE_DIR) {
+  const proc = spawn('node', [path.join(ROOT, 'mcp/server.mjs')], { env: { ...process.env, VE_BRIDGE_DIR: bridgeDir, VE_MCP_PORT: '47900' }, stdio: ['pipe', 'pipe', 'pipe'] });
   let buf = '';
   let id = 0;
   const waiting = new Map();
@@ -154,6 +154,31 @@ try {
   // a dialog the command opens is answered, and a confirm says No
   const nope = await client.tool('new_project', { name: 'Again' });
   check('new_project refuses to drop unsaved changes unless told', nope.error ? /unsaved changes/.test(nope.text) : true, nope.text.slice(0, 160));
+
+  // several copies of the server: one talks to the editor, the rest pass calls to it
+  const start = async (c) => {
+    await c.request('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'test', version: '1' } });
+    c.notify('notifications/initialized', {});
+  };
+  const second = mcpClient();
+  await start(second);
+  const viaSpoke = await second.tool('get_project');
+  check('a second copy passes its calls to the first', /passing calls/.test(second.stderr.join('')) && Array.isArray(viaSpoke.data?.tracks), second.stderr.join('').slice(0, 200) + ' ' + viaSpoke.text.slice(0, 120));
+  const firstStill = await client.tool('get_project');
+  check('the first copy keeps the editor', Array.isArray(firstStill.data?.tracks), firstStill.text.slice(0, 120));
+  client.proc.kill();
+  await sleep(300);
+  let taken = await second.tool('get_project');
+  if (!Array.isArray(taken.data?.tracks)) taken = await second.tool('get_project');
+  check('when the first copy closes, the second takes over', Array.isArray(taken.data?.tracks) && /hub: waiting/.test(second.stderr.join('')), taken.text.slice(0, 160));
+  client = second;
+  // two copies that both became the hub: the one the editor no longer follows hands over
+  const other = mcpClient('/tmp/ve-mcp-other');
+  await start(other);
+  fs.copyFileSync('/tmp/ve-mcp-other/bridge.json', `${BRIDGE_DIR}/bridge.json`);
+  const handed = await second.tool('get_project');
+  check('a hub that lost the bridge file passes its calls to the new one', Array.isArray(handed.data?.tracks) && second.stderr.join('').split('passing calls').length > 2, handed.text.slice(0, 160));
+  other.proc.kill();
 
   // turning control off disconnects
   await page.evaluate(async () => (await import('/src/core/settings.js')).saveSettings({ claudeControl: false }));
