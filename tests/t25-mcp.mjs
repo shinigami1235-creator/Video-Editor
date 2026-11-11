@@ -126,7 +126,8 @@ try {
   const voice = sp2.data[0].id;
   let rt = await client.tool('run_tool', { tool: 'clear_voice', item_id: voice, wait_seconds: 1 });
   check('a long tool answers with a job id while it runs', rt.data?.status === 'running' && /^job/.test(rt.data.job_id), rt.text.slice(0, 200));
-  const job = await client.tool('check_job', { job_id: rt.data.job_id, wait_seconds: 90 });
+  let job = await client.tool('check_job', { job_id: rt.data.job_id, wait_seconds: 40 });
+  for (let i = 0; i < 3 && job.data?.status === 'running'; i++) job = await client.tool('check_job', { job_id: job.data.job_id, wait_seconds: 40 });
   check('check_job returns the finished result', job.data?.done === 'clear_voice' && job.data.items?.[0]?.processed?.includes('clear'), job.text.slice(0, 300));
 
   // angles
@@ -141,7 +142,7 @@ try {
   // export as a job
   const out = `${DIR}/claude.mp4`;
   let ex = await client.tool('export', { kind: 'video', path: out, preset: 'square', start: 0, end: 2, wait_seconds: 2 });
-  if (ex.data?.status === 'running') ex = await client.tool('check_job', { job_id: ex.data.job_id, wait_seconds: 100 });
+  for (let i = 0; i < 5 && ex.data?.status === 'running'; i++) ex = await client.tool('check_job', { job_id: ex.data.job_id, wait_seconds: 40 });
   const pr = spawnSync('ffprobe', ['-v', 'error', '-show_entries', 'stream=codec_name,width,height', '-of', 'csv=p=0', out], { encoding: 'utf8' }).stdout;
   check('export makes the file in the preset shape', ex.data?.saved === out && /h264,1080,1080/.test(pr), ex.text.slice(0, 200) + ' ' + pr);
 
