@@ -146,6 +146,7 @@ try {
       if (process.env.GUIDE_LOG) console.log('    hit', await page.evaluate(([x, y]) => document.elementFromPoint(x, y)?.className, [s.rect.x, s.rect.y + s.rect.h / 2 - 20]));
       return page.mouse.click(s.rect.x, s.rect.y + s.rect.h / 2 - 20);
     }
+    if (/Type a word or phrase/.test(txt)) return page.fill('.transcript-panel .tr-search', 'skin');
     if (s.tag === 'SELECT') {
       await page.evaluate(() => {
         const el = window.__guide.steps[window.__guide.index]._target;
@@ -170,10 +171,11 @@ try {
     if (only && g.id !== only) continue;
     await restore(g.audio);
     // the test machine's speech model hears no words, so the transcript guide gets timed words put in by hand
-    if (g.id === 'transcript')
+    if (['transcript', 'bleep', 'search'].includes(g.id))
       await page.evaluate(() => {
         const m = Object.values(window.__store.project.media).find((x) => x.name === 'talk.mp4');
-        m.transcript = { words: 'Welcome to the clinic um today we look at skin boosters'.split(' ').map((t, i) => ({ t, s: 0.3 + i * 0.4, e: 0.6 + i * 0.4 })) };
+        m.transcript = { words: 'Welcome to the clinic um today we look at skin boosters oh shit'.split(' ').map((t, i) => ({ t, s: 0.3 + i * 0.4, e: 0.6 + i * 0.4 })) };
+        for (const o of Object.values(window.__store.project.media)) if (o !== m && (o.kind === 'video' || o.kind === 'audio')) o.transcript ||= { words: [] };
       });
     await page.evaluate((id) => window.__app.cmd('guide', id), g.id);
     await sleep(300);

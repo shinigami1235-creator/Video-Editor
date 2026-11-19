@@ -156,6 +156,56 @@ try {
   const nope = await client.tool('new_project', { name: 'Again' });
   check('new_project refuses to drop unsaved changes unless told', nope.error ? /unsaved changes/.test(nope.text) : true, nope.text.slice(0, 160));
 
+  // ---- jobs Claude does on Gid's plan: transcripts, search, bleeps, building, shorts, chapters, translation ----
+  await client.tool('open_project', { path: `${DIR}/claude-test.vproj`, discard_unsaved: true });
+  await page.evaluate(() => {
+    const p = window.__store.project;
+    const say = (text, from = 0.3, step = 0.3) => ({ words: text.split(' ').map((t, i) => ({ t, s: +(from + i * step).toFixed(2), e: +(from + i * step + step * 0.8).toFixed(2) })) });
+    for (const m of Object.values(p.media)) {
+      if (m.name === 'red.mp4') m.transcript = say('Welcome to the clinic. Today we look at lip fillers. Damn that was quick.');
+      if (m.name === 'blue.mp4') m.transcript = say('Here is the result after two weeks. Book your visit today.');
+      if (m.name === 'voice.wav') m.transcript = say('This is the voice over for the video.');
+    }
+  });
+  const tf = await client.tool('transcript', { source: 'footage' });
+  const redFile = tf.data?.files?.find((f) => f.name === 'red.mp4');
+  check('transcript reads every imported file as timed sentences', tf.data?.files?.length >= 3 && redFile?.sentences?.length === 3 && redFile.sentences[1].text.startsWith('Today'), tf.text.slice(0, 240));
+  const tl = await client.tool('transcript', { source: 'timeline' });
+  check('transcript reads the timeline in timeline seconds with item ids', tl.data?.clips?.length >= 1 && tl.data.clips.every((c) => c.item_id && c.sentences?.length), tl.text.slice(0, 200));
+  const sf = await client.tool('search_footage', { query: 'lip fill' });
+  check('search_footage finds the phrase with a sentence range', sf.data?.found === 1 && sf.data.hits[0].name === 'red.mp4' && sf.data.hits[0].sentence.start < sf.data.hits[0].start && sf.data.hits[0].sentence.end > sf.data.hits[0].end, sf.text.slice(0, 260));
+  const bl = await client.tool('bleep', { words: ['damn'] });
+  check('bleep puts a beep over the words asked for', bl.data?.bleeped >= 1 && JSON.stringify(bl.data.words).includes('Damn'), bl.text.slice(0, 200));
+  const redId = redFile.media_id;
+  const blueId = tf.data.files.find((f) => f.name === 'blue.mp4').media_id;
+  const voiceId = tf.data.files.find((f) => f.name === 'voice.wav').media_id;
+  const blueSen = tf.data.files.find((f) => f.name === 'blue.mp4').sentences[0];
+  const bv = await client.tool('build_video', { segments: [{ media_id: redId, start: redFile.sentences[1].start, end: redFile.sentences[1].end }, { media_id: blueId, start: blueSen.start, end: blueSen.end }], at: 'end', title: 'Lip fillers', transition: 'dissolve', music: { media_id: voiceId, volume: 0.4 } });
+  const bvClips = bv.data?.clips || [];
+  check('build_video lays the moments out in order with captions, title and music', bvClips.length === 2 && Math.abs(bvClips[0].in - redFile.sentences[1].start) < 0.01 && bvClips[1].transition_in?.type === 'dissolve' && bv.data.captions >= 2 && bv.data.music, bv.text.slice(0, 300));
+  const proj2 = (await client.tool('get_project')).data;
+  const titleThere = proj2.tracks.some((t) => t.items.some((i) => i.type === 'text' && i.text === 'Lip fillers'));
+  const musicItem = proj2.tracks.flatMap((t) => t.items).find((i) => i.id === bv.data.music);
+  check('the title and the music land where the video starts', titleThere && musicItem && Math.abs(musicItem.start - bv.data.start) < 0.01 && musicItem.volume === 0.4, JSON.stringify(musicItem || null));
+  const bvFrame = await client.tool('get_frame', { time: bv.data.start + 1.2, width: 640 });
+  if (bvFrame.images[0]) fs.writeFileSync('/tmp/ve-build.jpg', Buffer.from(bvFrame.images[0].data, 'base64'));
+  const badSeg = await client.tool('build_video', { segments: [{ media_id: redId, start: 5, end: 2 }] });
+  check('build_video explains a wrong segment', badSeg.error && /end must be after start/.test(badSeg.text), badSeg.text.slice(0, 120));
+  const ch = await client.tool('add_chapters', { chapters: [{ at: 2, title: 'Welcome' }, { at: 12, title: 'Lip fillers' }, { at: 20, title: 'Results' }] });
+  check('add_chapters adds markers and the YouTube lines', ch.data?.markers === 3 && /^0:00 Welcome/.test(ch.data.youtube_chapters), ch.text.slice(0, 160));
+  const tlist = await client.tool('translate_captions', { action: 'list' });
+  const nCaps = tlist.data?.captions?.length || 0;
+  const tapply = await client.tool('translate_captions', { action: 'apply', language: 'Filipino', texts: tlist.data.captions.map((c) => 'TL ' + c.text) });
+  const proj3 = (await client.tool('get_project')).data;
+  const tlTrack = proj3.tracks.find((t) => /Filipino/.test(t.name));
+  check('translate_captions adds the translation as a second line', nCaps >= 2 && tapply.data?.translated === nCaps && tlTrack?.items.length === nCaps && tlTrack.items[0].text.startsWith('TL '), tapply.text.slice(0, 160));
+  const short = await client.tool('make_shorts', { media_id: redId, moments: [{ start: redFile.sentences[1].start, end: redFile.sentences[1].end + 1, title: 'Lip fillers' }], folder: '/tmp/ve-mcp/shorts', wait_seconds: 40 });
+  let sh = short;
+  for (let i = 0; i < 5 && sh.data?.status === 'running'; i++) sh = await client.tool('check_job', { job_id: sh.data.job_id, wait_seconds: 40 });
+  const shortMp4 = sh.data?.shorts?.[0]?.video;
+  const shProbe = shortMp4 ? spawnSync('ffprobe', ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=width,height', '-of', 'csv=p=0', shortMp4], { encoding: 'utf8' }).stdout.trim() : '';
+  check('make_shorts saves a 9:16 project and MP4 for each moment', shProbe === '1080,1920' && fs.existsSync(sh.data.shorts[0].project), sh.text.slice(0, 200) + ' ' + shProbe);
+
   // several copies of the server: one talks to the editor, the rest pass calls to it
   const start = async (c) => {
     await c.request('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'test', version: '1' } });

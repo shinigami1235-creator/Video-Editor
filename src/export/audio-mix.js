@@ -8,6 +8,7 @@ import { clamp } from '../core/util.js';
 import { peaksSync, getPeaks, mediaDir } from '../media/library.js';
 import { ffmpeg } from '../media/ffmpeg.js';
 import { audioFx, ensurePitched, EqChain } from '../media/audio-fx.js';
+import { seamless, edgeGain, bleepGain, clickFreeOn, bleepTone, BLEEP_HZ, BLEEP_LEVEL } from '../media/clean-audio.js';
 
 const SR = 48000;
 
@@ -132,12 +133,14 @@ export async function mixAudio(project, t0, t1, outPath, { onProgress, signal } 
     const constant = !it.speedCurve && fx.keepPitch;
     const pcm = constant ? await pcmForSpeed(m, it.speed || 1, base, tag) : base;
     const eq = new EqChain(fx.eq);
-    prepared.push({ it, m, pcm, constant, speed: it.speed || 1, eq: eq.active ? eq : null });
+    prepared.push({ it, m, pcm, constant, speed: it.speed || 1, eq: eq.active ? eq : null, joins: seamless(project, it) });
   }
   const totalFrames = Math.max(1, Math.round((t1 - t0) * SR));
   await writeBytes(outPath, wavHeader(totalFrames * 8), { offset: 0, truncate: true });
   const chunk = SR * 5;
   const duckLevel = project.settings.duckLevel ?? 0.25;
+  const clickFree = clickFreeOn(project);
+  const tone = bleepTone(project);
   let duck = 1;
   const ducking = items.some((i) => i.duck);
   for (let f0 = 0; f0 < totalFrames; f0 += chunk) {
@@ -205,10 +208,24 @@ export async function mixAudio(project, t0, t1, outPath, { onProgress, signal } 
       const gsteps = Math.ceil(n / 480) + 1;
       const genv = new Float32Array(gsteps);
       for (let s = 0; s < gsteps; s++) genv[s] = baseGain(project, it, a + (s * 480) / SR);
+      // bleeps at 1 ms steps, so a word goes silent right on its edges
+      const bsteps = it.bleeps?.length ? Math.ceil(n / 48) + 1 : 0;
+      const benv = bsteps ? new Float32Array(bsteps) : null;
+      for (let s = 0; s < bsteps; s++) benv[s] = bleepGain(it, a + (s * 48) / SR);
+      const local0 = a - it.start;
+      const edgeNear = clickFree && (local0 < 0.05 || itemEnd(it) - b < 0.05);
+      const phase0 = Math.round((a - t0) * SR);
       for (let i = 0; i < n; i++) {
         const gi = i / 480;
         const g0 = Math.floor(gi);
-        const g = genv[g0] + (genv[Math.min(gsteps - 1, g0 + 1)] - genv[g0]) * (gi - g0);
+        let g = genv[g0] + (genv[Math.min(gsteps - 1, g0 + 1)] - genv[g0]) * (gi - g0);
+        if (edgeNear) g *= edgeGain(it, a + i / SR, p.joins);
+        let bl = 1;
+        if (benv) {
+          const bi = i / 48;
+          const b0 = Math.floor(bi);
+          bl = benv[b0] + (benv[Math.min(bsteps - 1, b0 + 1)] - benv[b0]) * (bi - b0);
+        }
         let d = 1;
         if (it.duck) {
           const di = (outStart + i) / 480;
@@ -216,10 +233,15 @@ export async function mixAudio(project, t0, t1, outPath, { onProgress, signal } 
           d = duckEnv[d0] + (duckEnv[Math.min(steps - 1, d0 + 1)] - duckEnv[d0]) * (di - d0);
         }
         const o = (outStart + i) * 2;
-        const L = src[i * 2] * g * d;
-        const R = src[i * 2 + 1] * g * d;
+        const L = src[i * 2] * g * d * bl;
+        const R = src[i * 2 + 1] * g * d * bl;
         mix[o] += L * lL + R * rL;
         mix[o + 1] += L * lR + R * rR;
+        if (bl < 1 && tone) {
+          const beep = Math.sin((2 * Math.PI * BLEEP_HZ * (phase0 + i)) / SR) * BLEEP_LEVEL * (1 - bl) * g * d;
+          mix[o] += beep;
+          mix[o + 1] += beep;
+        }
       }
     }
     // soft limit peaks above 0.9 so loud mixes do not clip hard

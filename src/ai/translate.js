@@ -103,6 +103,50 @@ export function translateDialog(app) {
   });
 }
 
+/**
+ * Puts translated texts on the captions, in the same order: a second line of
+ * smaller captions on their own track (mode add), or in place of the text
+ * (mode replace). Returns the captions that now hold the translation.
+ */
+export function applyTranslation(caps, texts, { lang, langName, mode = 'add' }) {
+  const opts = { lang, mode };
+  let made = [];
+  store.commit('Translate captions', (p) => {
+    if (opts.mode === 'replace') {
+      caps.forEach((c0, i) => {
+        const c = p.items[c0.id];
+        if (!c) return;
+        c.text = texts[i];
+        c.words = spreadWords(texts[i], 0, c.duration);
+        c.lang = opts.lang;
+      });
+      made = caps.map((c) => p.items[c.id]).filter(Boolean);
+    } else {
+      const tr = newTrack('video', `Captions (${langName})`);
+      tr.translation = true;
+      const base = captionTrack(p);
+      p.tracks.splice(p.tracks.indexOf(base), 0, tr);
+      caps.forEach((c0, i) => {
+        const c = p.items[c0.id];
+        if (!c) return;
+        const n = clone(c);
+        n.id = uid('c');
+        n.trackId = tr.id;
+        n.text = texts[i];
+        n.words = spreadWords(texts[i], 0, c.duration);
+        n.reveal = 'none';
+        n.lang = opts.lang;
+        n.translation = true;
+        n.props.y = c.props.y + Math.round(c.style.size * 1.5);
+        n.style = { ...c.style, size: Math.round(c.style.size * 0.8), highlightMode: 'none' };
+        p.items[n.id] = n;
+        made.push(n);
+      });
+    }
+  });
+  return made;
+}
+
 async function runTranslate(app, opts) {
   const langName = LANGUAGES.find(([, c]) => c === opts.lang)?.[0] || opts.lang;
   app.saveSetting('translateLang', opts.lang);
@@ -111,40 +155,7 @@ async function runTranslate(app, opts) {
   try {
     job.update(null, `Claude is translating into ${langName}`);
     const texts = await translateTexts(caps.map((c) => c.text), langName, { signal: job.signal, onProgress: (f) => job.update(f * 0.9) });
-    let made = [];
-    store.commit('Translate captions', (p) => {
-      if (opts.mode === 'replace') {
-        caps.forEach((c0, i) => {
-          const c = p.items[c0.id];
-          if (!c) return;
-          c.text = texts[i];
-          c.words = spreadWords(texts[i], 0, c.duration);
-          c.lang = opts.lang;
-        });
-        made = caps.map((c) => p.items[c.id]).filter(Boolean);
-      } else {
-        const tr = newTrack('video', `Captions (${langName})`);
-        tr.translation = true;
-        const base = captionTrack(p);
-        p.tracks.splice(p.tracks.indexOf(base), 0, tr);
-        caps.forEach((c0, i) => {
-          const c = p.items[c0.id];
-          if (!c) return;
-          const n = clone(c);
-          n.id = uid('c');
-          n.trackId = tr.id;
-          n.text = texts[i];
-          n.words = spreadWords(texts[i], 0, c.duration);
-          n.reveal = 'none';
-          n.lang = opts.lang;
-          n.translation = true;
-          n.props.y = c.props.y + Math.round(c.style.size * 1.5);
-          n.style = { ...c.style, size: Math.round(c.style.size * 0.8), highlightMode: 'none' };
-          p.items[n.id] = n;
-          made.push(n);
-        });
-      }
-    });
+    const made = applyTranslation(caps, texts, { lang: opts.lang, langName, mode: opts.mode });
     job.done(`Translated ${made.length} captions into ${langName}.`);
     if (opts.dub && opts.voice) await dub(app, made, opts.voice);
   } catch (e) {

@@ -161,7 +161,13 @@ export class Inspector {
       s.audioOnly
         ? section('Project', name, type, mag, h('div', { class: 'hint' }, 'The first audio track is the main one: with magnetic on, cutting a piece out closes the gap. Put music and sound effects on the tracks below it.'))
         : section('Project', name, type, presetSel, h('div', { class: 'row' }, h('label', {}, 'Size'), wIn, h('span', { class: 'unit' }, 'x'), hIn), fps, bg, mag),
-      section('Audio', duck, h('div', { class: 'hint' }, 'Music clips marked "Lower under voice" drop to this level while someone speaks.')),
+      section(
+        'Audio',
+        duck,
+        h('div', { class: 'hint' }, 'Music clips marked "Lower under voice" drop to this level while someone speaks.'),
+        toggle('Click-free cuts', s.clickFree !== false, (v) => this.set('Click-free cuts', (pp) => (pp.settings.clickFree = v)), { title: 'A 6 ms fade at every cut so the sound never pops' }),
+        select('Bleep sound', [['beep', 'Beep'], ['mute', 'Silence']], s.bleepSound || 'beep', (v) => this.set('Bleep sound', (pp) => (pp.settings.bleepSound = v))),
+      ),
       section('Shortcuts', this.shortcutList()),
     );
     return wrap;

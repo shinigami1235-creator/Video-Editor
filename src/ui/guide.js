@@ -270,6 +270,18 @@ export const GUIDES = [
     finish: 'The clip now plays the cleaned copy. If you only want one part of it, Remove background noise, Level out the voice and Even out loudness are next to that button. Go back to the original clip in the Smart tools tab to undo it.',
   },
 
+  {
+    id: 'bleep',
+    group: 'Sound',
+    title: 'Bleep swear words',
+    steps: () => {
+      const press = pressStep('Click Bleep.', () => byText('.panel button', 'Bleep'), () => !!modalTitled('Bleep words'));
+      const go = pressStep('Add or take out words in the list, then click Bleep them.', () => byText('.modal-foot button', 'Bleep them'));
+      return [...haveClip('sound'), panelStep('ai', 'Smart'), press, go, waitJob('Wait for the bar at the bottom right to finish.', () => !!go._clicked && !q('.jobs .job'))];
+    },
+    finish: 'Every word on the list has a beep over it now. The Transcript panel shows them crossed out, and Bleep sound in the project settings on the right switches the beep to silence.',
+  },
+
   // ---- text and captions ----
   {
     id: 'title',
@@ -468,6 +480,26 @@ export const GUIDES = [
     },
     goalLabel: 'Cut out silences',
     finish: 'The pauses are gone. Ctrl+Z brings them back.',
+  },
+
+  {
+    id: 'search',
+    group: 'Smart tools',
+    title: 'Find a moment by what was said',
+    steps: () => {
+      const missing = () => !!byText('.transcript-panel button', 'Make the transcripts');
+      const make = pressStep('Click Make the transcripts, since only files with a transcript can be searched.', () => byText('.transcript-panel button', 'Make the transcripts'), () => !missing());
+      return [
+        ...haveClip('sound'),
+        panelStep('ai', 'Smart'),
+        pressStep('Click Search under Search what was said.', () => byText('.panel button', 'Search'), () => !!q('.transcript-panel .tr-search')),
+        make,
+        waitJob('Wait for the bar at the bottom right to finish.', () => !missing() || (!!make._clicked && !q('.jobs .job'))),
+        { text: 'Type a word or phrase someone said, like a product name.', target: () => q('.transcript-panel .tr-search'), done: () => !!q('.fs-hit') },
+        { text: 'Click Add at the playhead on the one you want.', target: () => byText('.fs-hit button', 'Add at the playhead'), goal: (did) => did('Add a moment') },
+      ];
+    },
+    finish: 'That whole sentence is on the timeline at the playhead. Search covers every file you imported, on the timeline or not.',
   },
 
   // ---- export and save ----

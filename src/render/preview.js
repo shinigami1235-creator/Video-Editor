@@ -8,6 +8,7 @@ import { mediaUrl, loadImage } from '../media/library.js';
 import { clamp } from '../core/util.js';
 import { multicamOf, upcomingAngles } from '../core/multicam.js';
 import { voiceActive } from '../export/audio-mix.js';
+import { bleepGain, bleepTone, BLEEP_HZ, BLEEP_LEVEL } from '../media/clean-audio.js';
 import { audioFx, EQ_BANDS, ensurePitched, pitchedSync, pitchFailed } from '../media/audio-fx.js';
 import { fileUrl } from '../backend/index.js';
 
@@ -37,7 +38,21 @@ export function itemGain(project, it, t, audible) {
   if (it.fadeIn > 0 && local < it.fadeIn) g *= clamp(local / it.fadeIn, 0, 1);
   if (it.fadeOut > 0 && local > it.duration - it.fadeOut) g *= clamp((it.duration - local) / it.fadeOut, 0, 1);
   if (it.duck && audible && voiceActive(project, t, audible)) g *= project.settings.duckLevel ?? 0.25;
-  return Math.max(0, g);
+  return Math.max(0, g * bleepGain(it, t));
+}
+
+/** How loud the bleep tone is at t: the loudest bleeped word playing, at its clip's volume. */
+export function beepLevel(project, t, audible) {
+  if (!bleepTone(project)) return 0;
+  let lvl = 0;
+  for (const it of audible) {
+    if (!it.bleeps?.length) continue;
+    const b = bleepGain(it, t);
+    if (b >= 1) continue;
+    const g = itemGain(project, { ...it, bleeps: null }, t, audible);
+    lvl = Math.max(lvl, (1 - b) * g * BLEEP_LEVEL);
+  }
+  return lvl;
 }
 
 export class Preview {
@@ -139,6 +154,7 @@ export class Preview {
     this.playing = false;
     store.playing = false;
     for (const e of this.els.values()) if (!e.el.paused) e.el.pause();
+    this._beep(0);
     store.seek(store.snapTime(store.playhead));
     this.dirty = true;
     store.emit('play', false);
@@ -311,6 +327,7 @@ export class Preview {
         }
       }
     }
+    this._beep(this.playing ? beepLevel(project, t, audible) : 0);
     for (const [id, e] of this.els) {
       if (keep.has(id)) continue;
       if (!e.el.paused) e.el.pause();
@@ -319,6 +336,25 @@ export class Preview {
       if (now - e.lastUsed > 4000 || !project.items[itemId]) this._drop(id);
     }
     return plan;
+  }
+
+  /** The bleep tone: one oscillator that is only heard while a bleeped word plays. */
+  _beep(level) {
+    if (!this.audioCtx) return;
+    if (!this.beepOsc) {
+      if (!level) return;
+      try {
+        this.beepOsc = this.audioCtx.createOscillator();
+        this.beepOsc.frequency.value = BLEEP_HZ;
+        this.beepGain = this.audioCtx.createGain();
+        this.beepGain.gain.value = 0;
+        this.beepOsc.connect(this.beepGain).connect(this.master);
+        this.beepOsc.start();
+      } catch {
+        return;
+      }
+    }
+    this.beepGain.gain.setTargetAtTime(level * this.volume, this.audioCtx.currentTime, 0.006);
   }
 
   /** Plays, pauses and seeks one element for a wanted item. */

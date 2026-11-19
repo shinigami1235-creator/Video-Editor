@@ -27,6 +27,12 @@ export const COMMANDS = {
   },
 
   // speech and music
+  bleep: async (app) => (await import('./bleep.js')).bleepDialog(app),
+  searchFootage: async (app) => {
+    (await import('./transcript.js')).setTranscriptScope('footage');
+    app.openPanel('transcript');
+  },
+  withClaude: async (app, task) => (await import('./with-claude.js')).withClaudeDialog(app, task),
   silenceCut: async (app, it) => (await import('./speech-edit.js')).silenceCut(clipOrSelected(it)),
   fillerCut: async (app, it) => (await import('./speech-edit.js')).fillerCut(clipOrSelected(it)),
   beats: async (app, it) => (await import('./speech-edit.js')).markBeats(clipOrSelected(it)),

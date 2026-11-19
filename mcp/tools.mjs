@@ -11,8 +11,16 @@ How to work:
 - File paths are on Gid's computer (Windows paths such as C:\\Users\\User\\Videos\\clip.mov).
 - Long work (captions, background removal, exports, noise clean-up) answers with a job_id while it runs. Call check_job with that id until it finishes.
 - list_options gives the exact names of frames, presets, looks, transitions, animations and smart tools.
-- Paid services (shorts, translation, AI generation) are not available through this server.
-- Ask Gid before deleting things or replacing a project with unsaved changes.`;
+- Ask Gid before deleting things or replacing a project with unsaved changes.
+
+Jobs you do yourself, on Gid's Claude plan (the editor's paid API features are off, so these replace them):
+- A video from raw footage: transcript with source "footage" gives every imported file as timed sentences. Pick the best moments, offer Gid 2 or 3 ranked ideas with the moments each uses, then build the one he picks with build_video (segments in seconds of each file, captions, optional music and title). Check it with get_frame before saying it is done.
+- Finding a moment: search_footage finds a word or phrase across every imported file; each hit has a sentence range ready for build_video.
+- Shorts from a long video: read its transcript (source = its media_id), pick moments of whole sentences that make sense alone, then make_shorts.
+- YouTube chapters: read transcript with source "timeline", write the chapters, add them with add_chapters, and write titles, description and hashtags in the chat.
+- Translating captions: translate_captions with action "list", translate every line yourself, then action "apply" with the texts in the same order.
+- Swear words: bleep puts a beep (or silence) over them; with no words it uses a list of English and Filipino swear words.
+- Transcripts are made on Gid's computer by Whisper the first time a file is read, which takes about a quarter of its length; long ones answer with a job_id.`;
 
 const time = { description: 'Seconds from the start of the timeline. Also "playhead" or "end".', anyOf: [{ type: 'number', minimum: 0 }, { type: 'string', enum: ['playhead', 'end'] }] };
 const ids = { type: 'array', items: { type: 'string' }, description: 'Item ids from get_project.' };
@@ -209,6 +217,74 @@ captions (all speech, or item_id), remove_background (options.model: person, obj
       time,
       wait_seconds: wait,
     }),
+  },
+  {
+    name: 'transcript',
+    title: 'Read what is said',
+    description: 'Timed transcript as sentences (or words with detail "words"). source "timeline" (default): every clip with sound on the timeline, in timeline seconds, with its item_id. source "footage": every imported video and recording (or just media_ids), in seconds of each file, whether on the timeline or not. A media id as source reads that one file. Files without a transcript get one first (Whisper on Gid\'s computer).',
+    inputSchema: obj({ source: { type: 'string', description: 'timeline, footage, or a media id.' }, media_ids: { type: 'array', items: { type: 'string' } }, detail: { type: 'string', enum: ['sentences', 'words'] }, wait_seconds: wait }),
+    annotations: ro,
+  },
+  {
+    name: 'search_footage',
+    title: 'Search footage by what was said',
+    description: 'Finds a word or phrase in every imported video and recording. Each query word matches the start of a spoken word, in order ("lip fill" finds "lip filler"). Returns each hit with its file, times in the file, the words around it, the whole sentence range (ready for build_video) and where it already sits on the timeline.',
+    inputSchema: obj({ query: { type: 'string' }, limit: { type: 'number', minimum: 1, maximum: 100 }, make_missing: { type: 'boolean', description: 'Make missing transcripts first (default true).' }, wait_seconds: wait }, ['query']),
+    annotations: ro,
+  },
+  {
+    name: 'bleep',
+    title: 'Bleep words',
+    description: 'Puts a beep (sound "beep") or silence (sound "silence") over words in clips with sound, using their transcripts. With no words, it bleeps common English and Filipino swear words. A * at the end of a word matches any ending ("fuck*"). item_ids limits it to those clips; otherwise the selected clips, else every clip with sound. remove: true takes the bleeps off again.',
+    inputSchema: obj({ words: { type: 'array', items: { type: 'string' } }, item_ids: ids, sound: { type: 'string', enum: ['beep', 'silence'] }, remove: { type: 'boolean' }, wait_seconds: wait }),
+  },
+  {
+    name: 'build_video',
+    title: 'Build a video from moments',
+    description: 'Puts parts of imported files on the timeline in order, as one video. segments are { media_id, start, end } in seconds of each file (from transcript or search_footage). Video goes on the main track, sound-only files on an audio track. Adds captions from the transcripts (unless captions: false, caption_style from list_options), an optional title at the start, an optional transition between the segments, and optional music under it that lowers while someone speaks. at is where it goes on the timeline (default the end); replace: true clears the timeline first (ask Gid before using it). framing: contain (default), cover or blur for clips that do not fill the frame.',
+    inputSchema: obj({
+      segments: { type: 'array', items: obj({ media_id: { type: 'string' }, start: { type: 'number' }, end: { type: 'number' } }, ['media_id', 'start', 'end']) },
+      at: time,
+      replace: { type: 'boolean' },
+      captions: { type: 'boolean' },
+      caption_style: { type: 'string' },
+      title: { type: 'string' },
+      title_duration: { type: 'number' },
+      transition: { type: 'string', description: 'cut (default) or a transition name from list_options.' },
+      transition_duration: { type: 'number' },
+      framing: { type: 'string', enum: ['contain', 'cover', 'blur'] },
+      music: obj({ media_id: { type: 'string' }, start: { type: 'number', description: 'Where in the song to start, in seconds.' }, volume: { type: 'number', minimum: 0, maximum: 2 }, lower_under_voice: { type: 'boolean' } }, ['media_id']),
+      label: { type: 'string' },
+      wait_seconds: wait,
+    }, ['segments']),
+  },
+  {
+    name: 'make_shorts',
+    title: 'Make shorts',
+    description: 'Makes a 9:16 short from each moment of one long video: a new project with the moment, captions and its title at the top, saved as a .vproj and exported as an .mp4 (unless export: false) in Documents\\Video Editor Shorts or folder. moments are { start, end, title } in seconds of the file, whole sentences, 15 to 90 s each. Give media_id of the file or item_id of its clip. framing blur (default, the whole picture with a blurred copy behind) or cover (fills the frame, crops the sides). The open project is not changed.',
+    inputSchema: obj({
+      media_id: { type: 'string' },
+      item_id: { type: 'string' },
+      moments: { type: 'array', items: obj({ start: { type: 'number' }, end: { type: 'number' }, title: { type: 'string' } }, ['start', 'end', 'title']) },
+      framing: { type: 'string', enum: ['blur', 'cover'] },
+      captions: { type: 'boolean' },
+      titles: { type: 'boolean' },
+      export: { type: 'boolean' },
+      folder: { type: 'string' },
+      wait_seconds: wait,
+    }, ['moments']),
+  },
+  {
+    name: 'add_chapters',
+    title: 'Add YouTube chapters',
+    description: 'Adds chapter markers ({ at, title } in timeline seconds; the first moves to 0) and returns them as YouTube chapter lines to put in the description. Replaces earlier chapter markers unless replace: false.',
+    inputSchema: obj({ chapters: { type: 'array', items: obj({ at: { type: 'number' }, title: { type: 'string' } }, ['at', 'title']) }, replace: { type: 'boolean' } }, ['chapters']),
+  },
+  {
+    name: 'translate_captions',
+    title: 'Translate the captions',
+    description: 'action "list" returns the captions in order. Translate each line yourself (keep product, brand and medical names), then call action "apply" with texts in the same order and count, the language (Filipino, Thai, Spanish, Chinese, Japanese, Korean, Vietnamese, Indonesian, French, Arabic, or a code like tl; any other name works for captions only), and mode add (a second, smaller line under the original, the default) or replace. dub: true also has a voice read it where the editor has one for that language (not Filipino or Thai yet).',
+    inputSchema: obj({ action: { type: 'string', enum: ['list', 'apply'] }, texts: { type: 'array', items: { type: 'string' } }, language: { type: 'string' }, mode: { type: 'string', enum: ['add', 'replace'] }, dub: { type: 'boolean' }, voice: { type: 'string' }, wait_seconds: wait }),
   },
   {
     name: 'check_job',

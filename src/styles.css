@@ -2184,6 +2184,15 @@ select.frame-sel {
 .tw:hover { background: rgba(255, 255, 255, 0.07); }
 .tw.filler { text-decoration: underline dotted #d98a5c; text-underline-offset: 3px; }
 .tw.hit { background: rgba(201, 164, 92, 0.35); }
+.tw.bleeped { background: rgba(224, 92, 92, 0.28); text-decoration: line-through; text-decoration-color: rgba(224, 92, 92, 0.8); }
+.bleep-words { width: 100%; resize: vertical; font: inherit; }
+.fs-results { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.fs-hit { border: 1px solid var(--line2); border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; gap: 4px; }
+.fs-head { display: flex; align-items: center; gap: 6px; font-size: 12px; min-width: 0; }
+.fs-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.fs-text { margin: 0; font-size: 13px; line-height: 1.45; }
+.fs-text mark { background: rgba(201, 164, 92, 0.45); color: inherit; border-radius: 3px; padding: 0 2px; }
+.claude-prompt { width: 100%; resize: vertical; font: inherit; font-size: 13px; }
 .tw.now { background: var(--gold, #c9a45c); color: #111; }
 .tr-doc ::selection { background: rgba(220, 80, 80, 0.55); color: #fff; }
 

@@ -63,6 +63,7 @@ function itemSummary(p, it) {
     if (it.transitionIn?.type) out.transition_in = { type: it.transitionIn.type, duration: it.transitionIn.duration };
   }
   if (it.fadeIn || it.fadeOut) out.audio_fade = { in: it.fadeIn || 0, out: it.fadeOut || 0 };
+  if (it.bleeps?.length) out.bleeped = it.bleeps.map((b) => b.w);
   return out;
 }
 
@@ -94,7 +95,7 @@ function projectSummary() {
     tracks: order.map((t) => ({ id: t.id, name: t.name, kind: t.kind, main: t === main || undefined, hidden: t.hidden || undefined, muted: t.muted || undefined, locked: t.locked || undefined, items: Object.values(p.items).filter((i) => i.trackId === t.id).sort((a, b) => a.start - b.start).map((i) => itemSummary(p, i)) })),
     media: Object.values(p.media)
       .filter((m) => !m.hidden)
-      .map((m) => ({ id: m.id, name: m.name, kind: m.kind, path: m.path, duration: r3(m.duration), size: m.width ? `${m.width}x${m.height}` : undefined, fps: m.fps ? r3(m.fps) : undefined, has_audio: m.hasAudio || undefined, status: m.status, error: m.error || undefined, on_timeline: Object.values(p.items).some((i) => i.mediaId === m.id) })),
+      .map((m) => ({ id: m.id, name: m.name, kind: m.kind, path: m.path, duration: r3(m.duration), size: m.width ? `${m.width}x${m.height}` : undefined, fps: m.fps ? r3(m.fps) : undefined, has_audio: m.hasAudio || undefined, has_transcript: m.transcript ? true : undefined, status: m.status, error: m.error || undefined, on_timeline: Object.values(p.items).some((i) => i.mediaId === m.id) })),
     markers: (p.markers || []).map((m) => ({ id: m.id, at: r3(m.t), label: m.label || '' })),
     angles: anglesSummary(p),
   };
@@ -230,6 +231,68 @@ function applyChanges(p, it, ch, notes) {
     }
   }
 }
+
+// ---------------------------------------------------------------------------
+// Transcripts, footage and the jobs Claude does on Gid's own plan
+// ---------------------------------------------------------------------------
+
+/** Makes the transcripts that are missing, as a job the bridge waits for. */
+async function ensureTranscripts(list) {
+  const missing = [...new Set(list)].filter((m) => m && !m.transcript && m.hasAudio);
+  if (!missing.length) return 0;
+  const { startJob } = await import('../ui/notify.js');
+  const { transcribeMedia } = await import('./transcript.js');
+  const job = startJob('Transcripts');
+  try {
+    for (let i = 0; i < missing.length; i++) {
+      job.update(i / missing.length, `${missing[i].name} (${i + 1} of ${missing.length})`);
+      await transcribeMedia(missing[i], job);
+    }
+    job.done();
+  } catch (e) {
+    job.fail(e);
+    throw e;
+  }
+  return missing.length;
+}
+
+/** Words grouped into sentences: [{ start, end, text }]. */
+async function sentenceList(words) {
+  const { sentences } = await import('./llm.js');
+  return sentences(words).map((x) => ({ start: r3(x.s), end: r3(x.e), text: x.text }));
+}
+
+function mediaOf(id) {
+  const m = store.project.media[id];
+  if (!m) fail(`There is no media with id ${id}. Call get_project for the media ids.`);
+  return m;
+}
+
+/** The project's caption style chunked into caption items for the given clips, from their transcripts. */
+function captionClips(p, clips, { chunkWords, addCaptionItems, timelineTimeFor }) {
+  const words = [];
+  for (const c of clips) {
+    const list = p.media[c.mediaId]?.transcript?.words;
+    if (!list) continue;
+    const a = c.in;
+    const b = c.in + (c.duration * (c.speed || 1));
+    for (const w of list) {
+      if (w.s < a - 0.05 || w.e > b + 0.05) continue;
+      words.push({ text: w.t.trim(), start: timelineTimeFor(c, Math.max(a, w.s)), end: timelineTimeFor(c, Math.min(b, w.e)) });
+    }
+  }
+  words.sort((x, y) => x.start - y.start);
+  if (!words.length) return [];
+  return addCaptionItems(p, chunkWords(words, { maxWords: p.captionStyle?.maxWords || 4, maxChars: 26 }));
+}
+
+const ytTime = (t) => {
+  const sec = Math.max(0, Math.floor(t));
+  const hh = Math.floor(sec / 3600);
+  const mm = Math.floor((sec % 3600) / 60);
+  const ss = String(sec % 60).padStart(2, '0');
+  return hh ? `${hh}:${String(mm).padStart(2, '0')}:${ss}` : `${mm}:${ss}`;
+};
 
 // ---------------------------------------------------------------------------
 // Smart tools: name -> how to run it
@@ -586,6 +649,216 @@ export const TOOLS = {
     const n = Math.max(1, Math.min(50, Number(a.steps) || 1));
     for (let i = 0; i < n; i++) await ctx.app.cmd(a.action === 'redo' ? 'redo' : 'undo');
     return { last_steps: store.undoStack.slice(-5).map((e) => e.label) };
+  },
+
+  async transcript(a) {
+    const p = store.project;
+    const source = a.source || 'timeline';
+    const words = a.detail === 'words';
+    if (source === 'timeline') {
+      const { transcriptClips, clipWords } = await import('./transcript.js');
+      const clips = transcriptClips(p, 'all');
+      if (!clips.length) fail('Nothing with sound is on the timeline. Use source "footage" to read the imported files.');
+      await ensureTranscripts(clips.map((c) => p.media[c.mediaId]));
+      const out = [];
+      for (const c of transcriptClips(store.project, 'all')) {
+        const ws = (clipWords(c) || []).map((w) => ({ t: w.t, s: w.ts, e: w.te }));
+        if (!ws.length) continue;
+        out.push({ item_id: c.id, name: c.name || p.media[c.mediaId]?.name, start: r3(c.start), end: r3(itemEnd(c)), ...(words ? { words: ws.map((w) => [w.t.trim(), r3(w.s), r3(w.e)]) } : { sentences: await sentenceList(ws) }) });
+      }
+      return { times: 'seconds on the timeline', clips: out };
+    }
+    const { footage } = await import('./footage.js');
+    const list = source === 'footage' ? (a.media_ids?.length ? a.media_ids.map(mediaOf) : footage(p)) : [mediaOf(source)];
+    if (!list.length) fail('No imported video or recording has sound. Import footage first with import_media.');
+    await ensureTranscripts(list);
+    const out = [];
+    for (const m0 of list) {
+      const m = store.project.media[m0.id];
+      const ws = m.transcript?.words || [];
+      out.push({ media_id: m.id, name: m.name, kind: m.kind, duration: r3(m.duration), on_timeline: Object.values(store.project.items).some((i) => i.mediaId === m.id), ...(words ? { words: ws.map((w) => [w.t.trim(), w.s, w.e]) } : { sentences: await sentenceList(ws) }) });
+    }
+    return { times: 'seconds from the start of each file (use them as start and end in build_video and make_shorts)', files: out };
+  },
+
+  async search_footage(a) {
+    if (!a.query) fail('Give query, a word or phrase.');
+    const F = await import('./footage.js');
+    const p = store.project;
+    const missing = F.footage(p).filter((m) => !m.transcript);
+    if (missing.length && a.make_missing !== false) await ensureTranscripts(missing);
+    const hits = F.searchFootage(store.project, a.query, { limit: Math.min(100, Number(a.limit) || 30) });
+    return {
+      query: a.query,
+      found: hits.length,
+      hits: hits.map((x) => {
+        const sen = F.sentenceAround(store.project.media[x.mediaId], x.s, x.e);
+        return { media_id: x.mediaId, name: x.name, start: r3(x.s), end: r3(x.e), text: x.text, sentence: { start: r3(sen.s), end: r3(sen.e) }, on_timeline: x.places.map((pl) => ({ item_id: pl.itemId, at: r3(pl.t) })) };
+      }),
+    };
+  },
+
+  async bleep(a) {
+    const B = await import('./bleep.js');
+    const { DEFAULT_BLEEP_WORDS } = await import('../media/clean-audio.js');
+    const p = store.project;
+    const clips = a.item_ids?.length ? items(a.item_ids).filter((i) => i.type === 'clip' && p.media[i.mediaId]?.hasAudio) : B.bleepTargets(p);
+    if (!clips.length) fail('No clip with sound to bleep.');
+    if (a.sound) store.commit('Bleep sound', (pp) => (pp.settings.bleepSound = a.sound === 'silence' ? 'mute' : 'beep'));
+    if (a.remove) {
+      let n = 0;
+      store.commit('Remove bleeps', (pp) => (n = B.removeBleeps(pp, clips)));
+      return { removed: n };
+    }
+    await ensureTranscripts(clips.map((c) => p.media[c.mediaId]));
+    const words = a.words?.length ? a.words : DEFAULT_BLEEP_WORDS;
+    const found = B.findBleeps(store.project, clips.map((c) => store.project.items[c.id]).filter(Boolean), words);
+    let n = 0;
+    store.commit('Bleep words', (pp) => (n = B.addBleeps(pp, found)));
+    return { bleeped: n, sound: store.project.settings.bleepSound || 'beep', words: Object.entries(found).map(([id, l]) => ({ item_id: id, words: l.map((b) => ({ word: b.w, at_in_file: r3(b.s) })) })) };
+  },
+
+  async build_video(a, ctx) {
+    const segs = a.segments;
+    if (!Array.isArray(segs) || !segs.length) fail('Give segments, a list of { media_id, start, end } in seconds of each file (from transcript or search_footage).');
+    const p0 = store.project;
+    const ranges = segs.map((g, i) => {
+      const m = mediaOf(g.media_id);
+      if (m.kind === 'image') fail(`Segment ${i + 1}: ${m.name} is a photo. Segments are parts of videos or recordings; add photos with add_clips.`);
+      const st = Number(g.start);
+      const en = Number(g.end);
+      if (!(en > st)) fail(`Segment ${i + 1}: end must be after start.`);
+      if (st >= (m.duration || 0)) fail(`Segment ${i + 1}: ${m.name} is only ${r3(m.duration)} s long.`);
+      return { mediaId: m.id, s: Math.max(0, st), e: Math.min(m.duration, en) };
+    });
+    if (a.captions !== false) await ensureTranscripts(ranges.map((r) => p0.media[r.mediaId]));
+    const tr = a.transition && a.transition !== 'cut' ? a.transition : null;
+    if (tr && !TRANSITION_TYPES[tr]) fail(`Transition "${tr}" does not exist. Options: cut, ${Object.keys(TRANSITION_TYPES).join(', ')}`);
+    if (a.music?.media_id) mediaOf(a.music.media_id);
+    const F = await import('./footage.js');
+    const { newClip } = await import('../core/model.js');
+    const firstVideo = ranges.map((r) => store.project.media[r.mediaId]).find((m) => m.kind === 'video');
+    if (store.project.settings.matchFirst && firstVideo && !Object.values(store.project.items).some((i) => i.type === 'clip' && store.project.media[i.mediaId]?.kind === 'video')) ctx.app.fitCanvasTo(firstVideo);
+    let added = [];
+    let caps = [];
+    let music = null;
+    const start = a.at != null ? at(a.at) : a.replace ? 0 : projectDuration(store.project);
+    store.commit(a.label || 'Build the video', (p) => {
+      if (a.replace) {
+        p.items = {};
+        if (p.multicam) delete p.multicam;
+      }
+      added = F.addRanges(p, ranges, start);
+      if (tr) {
+        added.slice(1).forEach((c) => (c.transitionIn = { type: tr, duration: Number(a.transition_duration ?? 0.5) }));
+      }
+      for (const c of added) {
+        c.fit = a.framing === 'cover' ? 'cover' : 'contain';
+        if (a.framing === 'blur') (c.effects ||= {}).backdrop = 'blur';
+      }
+      const end = Math.max(...added.map((c) => itemEnd(c)));
+      if (a.music?.media_id) {
+        const mm = p.media[a.music.media_id];
+        const from = Math.max(0, Number(a.music.start) || 0);
+        music = newClip(mm, null, start, { inPoint: from, duration: Math.min(end - start, (mm.duration || end) - from) });
+        music.trackId = E.findFreeTrack(p, 'audio', music.start, itemEnd(music));
+        music.props.volume = Number(a.music.volume ?? 0.5);
+        music.duck = a.music.lower_under_voice !== false;
+        music.fadeIn = 0.4;
+        music.fadeOut = Math.min(2, music.duration / 4);
+        p.items[music.id] = music;
+      }
+    });
+    if (a.captions !== false && !store.project.settings.audioOnly) {
+      if (a.caption_style) await ctx.app.cmd('captionPreset', a.caption_style);
+      const Cap = await import('./captions.js');
+      store.commit('Captions', (p) => (caps = captionClips(p, added.map((c) => p.items[c.id]).filter(Boolean), Cap)));
+    }
+    if (a.title && !store.project.settings.audioOnly) await TOOLS.add_text({ text: a.title, at: start, duration: Number(a.title_duration) || 3, preset: 'Title' });
+    store.select(added.map((c) => c.id));
+    ctx.app.seek(start);
+    return {
+      clips: added.map((c) => store.project.items[c.id] && itemSummary(store.project, store.project.items[c.id])).filter(Boolean),
+      captions: caps.length,
+      music: music ? music.id : null,
+      start: r3(start),
+      end: r3(Math.max(...added.map((c) => itemEnd(store.project.items[c.id] || c)))),
+      next: 'Look at it with get_frame, then export.',
+    };
+  },
+
+  async make_shorts(a, ctx) {
+    const moments = a.moments;
+    if (!Array.isArray(moments) || !moments.length) fail('Give moments, a list of { start, end, title } in seconds of the file (from transcript).');
+    const p = store.project;
+    let it = a.item_id ? item(a.item_id) : null;
+    const m = it ? p.media[it.mediaId] : mediaOf(a.media_id || fail('Give media_id of the long video, or item_id of its clip.'));
+    if (!it) it = Object.values(p.items).find((i) => i.type === 'clip' && i.mediaId === m.id) || { mediaId: m.id, color: null };
+    if (a.captions !== false) await ensureTranscripts([m]);
+    const { buildShortProject } = await import('./shorts.js');
+    const { exportVideo } = await import('../export/export.js');
+    const { writeText } = await import('../backend/index.js');
+    const dir = a.folder || join(paths.documents, 'Video Editor Shorts');
+    await mkdir(dir).catch(() => {});
+    const safe = (x) => String(x).replace(/[<>:"/\\|?*\x00-\x1f]/g, '').replace(/\s+/g, ' ').trim().slice(0, 60) || 'Short';
+    const opts = { framing: a.framing === 'cover' ? 'cover' : 'blur', captions: a.captions !== false, title: a.titles !== false };
+    const job = (ctx.job = { title: 'Making shorts', fraction: 0, label: 'Starting' });
+    const made = [];
+    for (let i = 0; i < moments.length; i++) {
+      const mo = moments[i];
+      const st = Math.max(0, Number(mo.start));
+      const en = Math.min(m.duration, Number(mo.end));
+      if (!(en > st + 1)) fail(`Moment ${i + 1}: end must be at least a second after start, inside the ${r3(m.duration)} s file.`);
+      const moment = { start: st, end: en, title: String(mo.title || `Short ${i + 1}`) };
+      const sp = buildShortProject(store.project, { ...it, color: it.color || clone((await import('../core/model.js')).defaultColor()) }, moment, opts);
+      const base = join(dir, safe(`${p.name} - ${moment.title}`));
+      await writeText(base + '.vproj', JSON.stringify(sp));
+      const row = { title: moment.title, length: r3(en - st), project: base + '.vproj' };
+      if (a.export !== false) {
+        await exportVideo(sp, { out: base + '.mp4', width: 1080, height: 1920, fps: sp.settings.fps, bitrateMbps: 10, onProgress: (pr) => {
+          job.fraction = (i + pr.fraction) / moments.length;
+          job.label = `${moment.title} (${i + 1} of ${moments.length})`;
+        } });
+        row.video = base + '.mp4';
+      }
+      made.push(row);
+    }
+    return { folder: dir, shorts: made };
+  },
+
+  async add_chapters(a) {
+    const list = (a.chapters || []).map((c) => ({ t: Math.max(0, Number(c.at ?? c.t) || 0), title: String(c.title || '').trim() })).filter((c) => c.title).sort((x, y) => x.t - y.t);
+    if (!list.length) fail('Give chapters, a list of { at, title } in timeline seconds.');
+    list[0].t = 0;
+    store.commit('Chapter markers', (p) => {
+      p.markers ||= [];
+      if (a.replace !== false) p.markers = p.markers.filter((k) => k.color !== '#6fb3e0');
+      for (const c of list) p.markers.push({ id: 'mk' + Math.random().toString(36).slice(2, 9), t: c.t, label: c.title, color: '#6fb3e0' });
+      p.markers.sort((x, y) => x.t - y.t);
+    });
+    return { markers: list.length, youtube_chapters: list.map((c) => `${ytTime(c.t)} ${c.title}`).join('\n'), note: list.length < 3 ? 'YouTube needs at least 3 chapters.' : undefined };
+  },
+
+  async translate_captions(a, ctx) {
+    const { allCaptions } = await import('./captions.js');
+    const caps = allCaptions().filter((c) => !c.translation).sort((x, y) => x.start - y.start);
+    if (!caps.length) fail('There are no captions. Make them first with run_tool captions.');
+    if (a.action !== 'apply') return { captions: caps.map((c, i) => ({ n: i + 1, start: r3(c.start), end: r3(itemEnd(c)), text: c.text })), next: 'Translate every text, keep the same order and count, then call translate_captions with action "apply".' };
+    const T = await import('./translate.js');
+    if (!Array.isArray(a.texts) || a.texts.length !== caps.length) fail(`Give texts, ${caps.length} translated lines in the same order as the captions (got ${a.texts?.length || 0}).`);
+    const want = String(a.language || '').toLowerCase().trim();
+    const langRow = T.LANGUAGES.find(([nm, code]) => code === want || nm.toLowerCase() === want || nm.toLowerCase().startsWith(want + ' ') || (want === 'tagalog' && code === 'tl'));
+    const code = langRow?.[1] || a.language || 'xx';
+    const langName = langRow?.[0] || a.language || 'Translation';
+    const made = T.applyTranslation(caps, a.texts.map(String), { lang: code, langName, mode: a.mode === 'replace' ? 'replace' : 'add' });
+    let dubbed = false;
+    if (a.dub) {
+      const vs = T.voicesFor(code);
+      if (!vs.length) return { translated: made.length, dubbed: false, note: `There is no voice on this computer for ${langName}, so it is captions only.` };
+      await T.dub(ctx.app, made.map((c) => store.project.items[c.id] || c), a.voice || vs[0][0]);
+      dubbed = true;
+    }
+    return { translated: made.length, language: langName, mode: a.mode === 'replace' ? 'replace' : 'add', dubbed };
   },
 
   async export(a, ctx) {

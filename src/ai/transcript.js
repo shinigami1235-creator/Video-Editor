@@ -156,15 +156,22 @@ let scope = 'main';
 let query = '';
 let seekOff = null;
 
+/** Opens the panel on a view: main, all, selected, or footage (search every imported file). */
+export function setTranscriptScope(s) {
+  scope = s;
+}
+
 export function transcriptPanel(app) {
   const body = h('div', { class: 'panel-body transcript-panel' });
   const p = store.project;
+  if (scope === 'footage') {
+    body.append(scopeSelect(app, p));
+    import('./footage.js').then(({ footageView }) => footageView(app, body));
+    return body;
+  }
   const clips = transcriptClips(p, scope);
   const missing = [...new Set(clips.map((c) => p.media[c.mediaId]).filter((m) => !m.transcript))];
-  const scopeSel = select('Show', [['main', p.settings.audioOnly ? 'First audio track' : 'Main track'], ['all', 'Every clip with sound'], ['selected', 'Selected clips']], scope, (v) => {
-    scope = v;
-    app.renderPanel();
-  });
+  const scopeSel = scopeSelect(app, p);
   const search = h('input', { type: 'search', placeholder: 'Find a word', value: query, class: 'tr-search' });
   body.append(scopeSel, search);
   if (!clips.length) {
@@ -189,7 +196,8 @@ export function transcriptPanel(app) {
         para.append(line);
         line = h('p', {});
       }
-      const span = h('span', { class: 'tw' + (FILLERS.test(w.t.trim()) ? ' filler' : '') + (query && w.t.toLowerCase().includes(query.toLowerCase()) ? ' hit' : '') }, w.t + ' ');
+      const bleeped = c.bleeps?.some((b) => w.s < b.e && w.e > b.s);
+      const span = h('span', { class: 'tw' + (FILLERS.test(w.t.trim()) ? ' filler' : '') + (bleeped ? ' bleeped' : '') + (query && w.t.toLowerCase().includes(query.toLowerCase()) ? ' hit' : '') }, w.t + ' ');
       span.dataset.clip = c.id;
       span.dataset.i = w.i;
       span.dataset.t = w.ts;
@@ -218,6 +226,19 @@ export function transcriptPanel(app) {
     window.getSelection()?.removeAllRanges();
     toast(`Cut ${res.removed} word${res.removed === 1 ? '' : 's'}.`, { timeout: 2500 });
   };
+  const doBleep = async (els) => {
+    if (!els.length) return toast('Select some words first by dragging across them.', { timeout: 2200 });
+    const byClip = new Map();
+    for (const el of els) {
+      if (!byClip.has(el.dataset.clip)) byClip.set(el.dataset.clip, []);
+      byClip.get(el.dataset.clip).push(Number(el.dataset.i));
+    }
+    const { bleepPicked } = await import('./bleep.js');
+    let n = 0;
+    store.commit('Bleep words', (pp) => (n = bleepPicked(pp, byClip)));
+    window.getSelection()?.removeAllRanges();
+    toast(`Bleeped ${n} word${n === 1 ? '' : 's'}.`, { timeout: 2500 });
+  };
   doc.addEventListener('click', (e) => {
     const w = e.target.closest('.tw');
     if (!w || !window.getSelection()?.isCollapsed) return;
@@ -245,6 +266,8 @@ export function transcriptPanel(app) {
     button('Cut selected words', () => doCut(selectedWords()), { icon: 'split' }),
     button('Cut filler words', () => doCut([...doc.querySelectorAll('.tw.filler')]), { kind: 'link' }),
     button('Cut found words', () => doCut([...doc.querySelectorAll('.tw.hit')]), { kind: 'link' }),
+    button('Bleep selected words', () => doBleep(selectedWords()), { kind: 'link' }),
+    button('Bleep words…', () => app.cmd('bleep'), { kind: 'link' }),
     button('Copy text', () => navigator.clipboard?.writeText([...doc.querySelectorAll('.tr-clip p')].map((x) => x.textContent.trim()).join('\n\n')).then(() => toast('Copied.')), { kind: 'link' }),
   );
   body.append(tools, h('div', { class: 'hint' }, count ? 'Drag across words and press Delete to cut them from the video. Click a word to jump there. Filler words are underlined.' : ''), doc);
@@ -267,6 +290,13 @@ export function transcriptPanel(app) {
   seekOff = store.on('seek', mark);
   setTimeout(mark, 0);
   return body;
+}
+
+function scopeSelect(app, p) {
+  return select('Show', [['main', p.settings.audioOnly ? 'First audio track' : 'Main track'], ['all', 'Every clip with sound'], ['selected', 'Selected clips'], ['footage', 'Search all imported footage']], scope, (v) => {
+    scope = v;
+    app.renderPanel();
+  });
 }
 
 async function transcribeAll(app, list) {
