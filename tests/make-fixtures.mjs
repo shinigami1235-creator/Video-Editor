@@ -1,7 +1,8 @@
 // Makes the synthetic test media in /tmp/ve-fixtures with FFmpeg, for a fresh
-// machine. Photos of real faces (face.jpg, portrait.jpg and the like) and the
-// spoken-word recordings can't be made here, so the face and speech tests
-// need those copied in by hand.
+// machine. Photos of real faces (face.jpg, portrait.jpg and the like) can't be
+// made here, so the face tests need those copied in by hand. talk.mp4 and
+// speech.wav are stand-ins: voice-like bursts with pauses, not real words, which
+// is all the tests need since they put the transcript words in by hand.
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 
@@ -26,3 +27,8 @@ ff('pattern.wav', ['-f', 'lavfi', '-i', PATTERN]);
 // two phones filming the same sound: camB starts 3.2 s into camA's sound
 ff('camA.mp4', ['-f', 'lavfi', '-i', 'testsrc=size=640x360:rate=30', '-i', `${FIX}/pattern.wav`, '-map', '0:v', '-map', '1:a', '-t', '12.6', ...v264, '-c:a', 'aac']);
 ff('camB.mp4', ['-f', 'lavfi', '-i', 'smptebars=size=640x360:rate=30', '-ss', '3.2', '-i', `${FIX}/pattern.wav`, '-map', '0:v', '-map', '1:a', '-t', '9', ...v264, '-c:a', 'aac']);
+// voice-like bursts with pauses under a little hiss
+const VOICE = "aevalsrc='0.4*sin(2*PI*220*t)*sin(2*PI*3*t)*lt(mod(t,3),1.8)':s=48000:d=";
+ff('pink.wav', ['-f', 'lavfi', '-i', 'anoisesrc=c=pink:a=0.3:r=48000:d=6']);
+ff('speech.wav', ['-f', 'lavfi', '-i', VOICE + '12', '-f', 'lavfi', '-i', 'anoisesrc=c=pink:a=0.02:r=48000:d=12', '-filter_complex', 'amix=inputs=2:normalize=0']);
+ff('talk.mp4', ['-f', 'lavfi', '-i', 'testsrc2=size=1280x720:rate=30:duration=10', '-f', 'lavfi', '-i', VOICE + '10', '-f', 'lavfi', '-i', 'anoisesrc=c=pink:a=0.02:r=48000:d=10', '-filter_complex', '[1:a][2:a]amix=inputs=2:normalize=0[a]', '-map', '0:v', '-map', '[a]', ...v264, '-c:a', 'aac', '-shortest']);
