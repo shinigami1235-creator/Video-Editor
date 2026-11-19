@@ -24,7 +24,7 @@ import crypto from 'node:crypto';
 import readline from 'node:readline';
 import { TOOLS, INSTRUCTIONS } from './tools.mjs';
 
-const VERSION = '1.0.1';
+const VERSION = '1.1.0';
 const BASE_PORT = Number(process.env.VE_MCP_PORT) || 47811;
 const BRIDGE_DIR = process.env.VE_BRIDGE_DIR || path.join(os.homedir(), '.cygnus-video-editor');
 const BRIDGE_FILE = path.join(BRIDGE_DIR, 'bridge.json');
