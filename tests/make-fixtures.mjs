@@ -31,4 +31,4 @@ ff('camB.mp4', ['-f', 'lavfi', '-i', 'smptebars=size=640x360:rate=30', '-ss', '3
 const VOICE = "aevalsrc='0.4*sin(2*PI*220*t)*sin(2*PI*3*t)*lt(mod(t,3),1.8)':s=48000:d=";
 ff('pink.wav', ['-f', 'lavfi', '-i', 'anoisesrc=c=pink:a=0.3:r=48000:d=6']);
 ff('speech.wav', ['-f', 'lavfi', '-i', VOICE + '12', '-f', 'lavfi', '-i', 'anoisesrc=c=pink:a=0.02:r=48000:d=12', '-filter_complex', 'amix=inputs=2:normalize=0']);
-ff('talk.mp4', ['-f', 'lavfi', '-i', 'testsrc2=size=1280x720:rate=30:duration=10', '-f', 'lavfi', '-i', VOICE + '10', '-f', 'lavfi', '-i', 'anoisesrc=c=pink:a=0.02:r=48000:d=10', '-filter_complex', '[1:a][2:a]amix=inputs=2:normalize=0[a]', '-map', '0:v', '-map', '[a]', ...v264, '-c:a', 'aac', '-shortest']);
+ff('talk.mp4', ['-f', 'lavfi', '-i', 'testsrc2=size=1280x720:rate=30:duration=14', '-f', 'lavfi', '-i', VOICE + '14', '-f', 'lavfi', '-i', 'anoisesrc=c=pink:a=0.02:r=48000:d=14', '-filter_complex', '[1:a][2:a]amix=inputs=2:normalize=0[a]', '-map', '0:v', '-map', '[a]', ...v264, '-c:a', 'aac', '-shortest']);
